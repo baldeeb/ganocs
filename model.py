@@ -42,10 +42,14 @@ class RoIHeadsWithNocs(nn.Module):
             ):
         
         results, lables = self.heads(features, proposals, image_shapes, targets)
-        for _, head in self.nocs_heads.items():
+        print(results[0].keys())
+        for key, head in self.nocs_heads.items():
             x = head['roi_align'](features, proposals, image_shapes)
             x = head['head'](x)
             x = head['pred'](x)
+
+
+
         return results, lables
     
 
@@ -152,8 +156,11 @@ class NOCS(MaskRCNN):
             mask_predictor,
             **kwargs,
         )
-        self.roi_heads = RoIHeadsWithNocs(self.roi_heads)
+        self.roi_heads = RoIHeadsWithNocs(in_channels=backbone.out_channels, other_heads=self.roi_heads)
 
+    def forward(self, images, targets=None):
+        mask_rcnn_results = MaskRCNN.forward(self, images, targets)
+        return mask_rcnn_results
 
 
 
@@ -169,10 +176,10 @@ if __name__=='__main__':
 
     if 'image' not in vars():
         # DATA_FOLDER = Path(__file__).resolve().parent / 'data'
-        DATA_FOLDER = Path('/home/bahaa/Code/torch_nocs/data')
+        DATA_FOLDER = Path('/home/baldeeb/Data/cocodataset/')
         dataset = torchvision.datasets.CocoDetection(
-                                    DATA_FOLDER/'train' 
-                                    ,DATA_FOLDER/'annotations/instances_train2017.json'
+                                    DATA_FOLDER/'val2017' 
+                                    ,DATA_FOLDER/'annotations_trainval2017/annotations/instances_val2017.json'
                                     ,transform=transforms.PILToTensor())
         image, targets = dataset[0][0], dataset[0][1] 
 
