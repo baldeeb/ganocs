@@ -1,57 +1,7 @@
+import torch
 
-from typing import Any, Callable, List, Optional, Tuple, Union, Dict
-
-import torch 
-from torch import nn, Tensor
-
-from torchvision.ops import MultiScaleRoIAlign
-from torchvision.models.detection.roi_heads import RoIHeads
-from torchvision.models.detection.mask_rcnn import MaskRCNN, MaskRCNNHeads, MaskRCNNPredictor
-
-
-class RoIHeadsWithNocs(nn.Module):
-    def __init__(self, in_channels, num_bins=32, other_heads:RoIHeads=None):
-        super().__init__()
-        self.heads = other_heads
-
-        layers = (256, 256, 256, 256, 256)
-
-        self.nocs_heads = {}
-        for k in ['x', 'y', 'z']:
-            self.nocs_heads[k] = nn.ModuleDict({
-                'roi_align': MultiScaleRoIAlign(
-                                featmap_names=["0", "1", "2", "3"], 
-                                output_size=14, 
-                                sampling_ratio=2),
-                'head': MaskRCNNHeads(
-                                in_channels, 
-                                layers[:-1], 
-                                dilation=1),
-                'pred': MaskRCNNPredictor(
-                                layers[-2], 
-                                layers[-1], 
-                                num_bins)
-            })
-
-    def forward(
-            self,
-            features     : Dict[str, Tensor],
-            proposals    : List[Tensor],
-            image_shapes : List[Tuple[int, int]],
-            targets      : Optional[List[Dict[str, Tensor]]] = None ,
-            ):
-        
-        results, lables = self.heads(features, proposals, image_shapes, targets)
-        print(results[0].keys())
-        for key, head in self.nocs_heads.items():
-            x = head['roi_align'](features, proposals, image_shapes)
-            x = head['head'](x)
-            x = head['pred'](x)
-
-
-
-        return results, lables
-    
+from models.nocs_roi_heads import RoIHeadsWithNocs, add_nocs_to_RoIHeads
+from torchvision.models.detection.mask_rcnn import MaskRCNN
 
 def discretize_nocs(mast_gt_nocs):
 # TODO ################################################
@@ -156,39 +106,9 @@ class NOCS(MaskRCNN):
             mask_predictor,
             **kwargs,
         )
-        self.roi_heads = RoIHeadsWithNocs(in_channels=backbone.out_channels, other_heads=self.roi_heads)
+        self.roi_heads:RoIHeadsWithNocs = add_nocs_to_RoIHeads(self.roi_heads )
 
-    def forward(self, images, targets=None):
-        mask_rcnn_results = MaskRCNN.forward(self, images, targets)
-        return mask_rcnn_results
+    # def forward(self, images, targets=None):
+    #     mask_rcnn_results = MaskRCNN.forward(self, images, targets)
+    #     return mask_rcnn_results
 
-
-
-if __name__=='__main__':
-
-
-    import torch
-    import torchvision
-    from pathlib import Path
-    from torchvision import transforms
-    from torchvision.models import ResNet50_Weights
-    from torchvision.models.detection.backbone_utils import resnet_fpn_backbone    
-
-    if 'image' not in vars():
-        # DATA_FOLDER = Path(__file__).resolve().parent / 'data'
-        DATA_FOLDER = Path('/home/baldeeb/Data/cocodataset/')
-        dataset = torchvision.datasets.CocoDetection(
-                                    DATA_FOLDER/'val2017' 
-                                    ,DATA_FOLDER/'annotations_trainval2017/annotations/instances_val2017.json'
-                                    ,transform=transforms.PILToTensor())
-        image, targets = dataset[0][0], dataset[0][1] 
-
-
-    backbone = resnet_fpn_backbone('resnet50', ResNet50_Weights.DEFAULT)
-    m = NOCS(backbone, 91)
-
-
-    m.eval()
-    x = [torch.rand(3, 30, 40), torch.rand(3, 50, 40)]
-    # x = [image.float() / 255.0]
-    predictions = m(x)

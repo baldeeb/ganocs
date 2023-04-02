@@ -4,12 +4,46 @@ import torch
 from torch import nn, Tensor
 
 from torchvision.ops import MultiScaleRoIAlign
-from torchvision.models.detection.roi_heads import RoIHeads
+from torchvision.models.detection.roi_heads import (
+    RoIHeads, fastrcnn_loss,
+    maskrcnn_loss, maskrcnn_inference,
+    keypointrcnn_loss, keypointrcnn_inference,
+    )
 from torchvision.models.detection.mask_rcnn import MaskRCNN, MaskRCNNHeads, MaskRCNNPredictor
 
 
-class RoIHeadsWithNocs(RoIHeads):
+def add_nocs_to_RoIHeads(heads:RoIHeads, nocs_ch_in=256, nocs_num_bins=32):
+    return RoIHeadsWithNocs(
+        heads.box_roi_pool, 
+        heads.box_head,
+        heads.box_predictor,
 
+        heads.proposal_matcher.high_threshold,
+        heads.proposal_matcher.low_threshold,
+
+        heads.fg_bg_sampler.batch_size_per_image,
+        heads.fg_bg_sampler.positive_fraction,
+        
+        heads.box_coder.weights, 
+
+        heads.score_thresh,
+        heads.nms_thresh, 
+        heads.detections_per_img,
+
+        heads.mask_roi_pool, 
+        heads.mask_head,
+        heads.mask_predictor, 
+
+        heads.keypoint_roi_pool,
+        heads.keypoint_head,
+        heads.keypoint_predictor,
+
+        in_channels=nocs_ch_in,
+        num_bins=nocs_num_bins
+    )
+
+
+class RoIHeadsWithNocs(RoIHeads):
     def __init__(
         self,
         box_roi_pool,
@@ -217,12 +251,18 @@ class RoIHeadsWithNocs(RoIHeads):
             losses.update(loss_keypoint)
 
 
+        if self.nocs_heads:
+            if not self.has_mask(): raise Exception("The mask head is needed for ")
+            nocs_results = {}
+            for key, layers in self.nocs_heads.items():
+                # TODO: same as mask head
+                x = layers['roi_align'](features, proposals, image_shapes)
+                x = layers['head'](x)
+                nocs_results[key] = layers['pred'](x)
 
-        for key, head in self.nocs_heads.items():
-            # TODO: same as mask head
-            x = head['roi_align'](features, proposals, image_shapes)
-            x = head['head'](x)
-            x = head['pred'](x)
+            for r_idx, r in enumerate(result):
+                r["nocs"] = {k:v[r_idx] for k, v in nocs_results.items()}
 
 
         return result, losses
+    
