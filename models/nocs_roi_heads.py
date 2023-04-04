@@ -84,22 +84,28 @@ class RoIHeadsWithNocs(RoIHeads):
 
         layers = (256, 256, 256, 256, 256)
 
+        # TODO: pass in as param
         self.nocs_heads = {}
         for k in ['x', 'y', 'z']:
             self.nocs_heads[k] = nn.ModuleDict({
                 'roi_align': MultiScaleRoIAlign(
-                                featmap_names=["0", "1", "2", "3"], 
+                                featmap_names=["0", "1", 
+                                               "2", "3"], 
                                 output_size=14, 
                                 sampling_ratio=2),
-                'head': MaskRCNNHeads(
-                                in_channels, 
-                                layers[:-1], 
-                                dilation=1),
-                'pred': MaskRCNNPredictor(
-                                layers[-2], 
-                                layers[-1], 
-                                num_bins)
+                'head': MaskRCNNHeads(in_channels, 
+                                      layers[:-1], 
+                                      dilation=1),
+                'pred': nn.Sequential(
+                            MaskRCNNPredictor(layers[-2], 
+                                            layers[-1], 
+                                            num_bins),
+                            nn.Softmax()
+                        ) 
             })
+
+    def has_nocs(self): 
+        return self.nocs_heads is not None
 
     def forward(
             self,
@@ -179,6 +185,10 @@ class RoIHeadsWithNocs(RoIHeads):
 
             if self.mask_roi_pool is not None:
                 mask_features = self.mask_roi_pool(features, mask_proposals, image_shapes)
+
+                if self.has_nocs():
+                    nocs_results = self._nocs_features(mask_features)
+
                 mask_features = self.mask_head(mask_features)
                 mask_logits = self.mask_predictor(mask_features)
             else:
@@ -193,6 +203,15 @@ class RoIHeadsWithNocs(RoIHeads):
                 gt_labels = [t["labels"] for t in targets]
                 rcnn_loss_mask = maskrcnn_loss(mask_logits, mask_proposals, gt_masks, gt_labels, pos_matched_idxs)
                 loss_mask = {"loss_mask": rcnn_loss_mask}
+
+                if self.has_nocs():
+                    gt_nocs = [t["nocs"] for t in targets]
+                    
+                    loss_mask["loss_nocs"] = nocs_class_loss(nocs_results, 
+                                                    mask_proposals, 
+                                                    gt_masks, gt_nocs, 
+                                                    pos_matched_idxs)
+
             else:
                 labels = [r["labels"] for r in result]
                 masks_probs = maskrcnn_inference(mask_logits, labels)
@@ -251,18 +270,36 @@ class RoIHeadsWithNocs(RoIHeads):
             losses.update(loss_keypoint)
 
 
-        if self.nocs_heads:
-            if not self.has_mask(): raise Exception("The mask head is needed for ")
-            nocs_results = {}
-            for key, layers in self.nocs_heads.items():
-                # TODO: same as mask head
-                x = layers['roi_align'](features, proposals, image_shapes)
-                x = layers['head'](x)
-                nocs_results[key] = layers['pred'](x)
+        # if self.nocs_heads:
+        #     if not self.has_mask(): raise Exception("The mask head is needed for ")
+        #     nocs_results = {}
+        #     for key, layers in self.nocs_heads.items():
+        #         # TODO: same as mask head
+        #         x = layers['roi_align'](features, proposals, image_shapes)
+        #         x = layers['head'](x)
+        #         nocs_results[key] = layers['pred'](x)
 
-            for r_idx, r in enumerate(result):
-                r["nocs"] = {k:v[r_idx] for k, v in nocs_results.items()}
+        #     for r_idx, r in enumerate(result):
+        #         r["nocs"] = {k:v[r_idx] for k, v in nocs_results.items()}
 
 
         return result, losses
     
+
+    def _nocs_features(self, mask_features):
+        nocs_results: Dict[str, torch.Tensor] = {}
+        for key, layers in self.nocs_heads.items():
+            # TODO: same as mask head
+            x = layers['head'](mask_features)
+            nocs_results[key] = layers['pred'](x)
+        return nocs_results
+
+    def _infer_nocs_from_bin(features):
+        """
+        Given nocs feature return the nocs values
+        """
+
+def nocs_class_loss(**kwargs):
+    print('NOT YET IMPLEMENTED')
+    print(f'recieved {kwargs.keys()}')
+        

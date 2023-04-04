@@ -7,6 +7,7 @@ from torchvision.models import ResNet50_Weights
 from torchvision.models.detection.backbone_utils import resnet_fpn_backbone    
 
 from models.nocs import NOCS
+from torchvision.models.detection.mask_rcnn import MaskRCNN
 
 if __name__=='__main__':
 
@@ -33,13 +34,14 @@ if __name__=='__main__':
 
 
     backbone = resnet_fpn_backbone('resnet50', ResNet50_Weights.DEFAULT)
-    m = NOCS(backbone, 2)
+    # m = NOCS(backbone, 2)
+    m = MaskRCNN(backbone, 2)
 
     m.eval()
     x = [torch.rand(3, 10, 10)]
     # x = [image.float() / 255.0]
     predictions = m(x)
-
+    print('done')
 
 
 def show_image(im):
