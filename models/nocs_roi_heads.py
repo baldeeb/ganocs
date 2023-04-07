@@ -10,6 +10,48 @@ from torchvision.models.detection.roi_heads import (
     keypointrcnn_loss, keypointrcnn_inference,
     )
 from torchvision.models.detection.mask_rcnn import MaskRCNN, MaskRCNNHeads, MaskRCNNPredictor
+from torchvision.models.detection.transform import (GeneralizedRCNNTransform, 
+                                                    resize_boxes, 
+                                                    paste_masks_in_image)
+
+from models.nocs_loss import nocs_class_loss
+
+class GeneralizedRCNNTransformWithNocs(GeneralizedRCNNTransform):
+    '''
+    Expands GeneralizaleRCNNTransforms to include NOCS postprocessing.
+    This class explicitly calls postprocessing as is called by RCNN
+    '''
+    def __init__(self, **kwargs):
+        super().__init__(**kwargs)
+    
+    def postprocess(
+        self,
+        result: List[Dict[str, Tensor]],
+        image_shapes: List[Tuple[int, int]],
+        original_image_sizes: List[Tuple[int, int]],
+    ) -> List[Dict[str, Tensor]]:
+        result = GeneralizedRCNNTransform.postprocess(self, 
+                                                      result, 
+                                                      image_shapes, 
+                                                      original_image_sizes)
+        if self.training: return result
+        
+        for i, (pred, o_im_s) in enumerate(zip(result, original_image_sizes)):
+            if "nocs" in pred:
+                num_bins =  pred["nocs"]["x"].shape[0]
+                def process_nocs_dim(v):
+                    v = v.softmax(0).argmax(1) / num_bins
+                    v = paste_masks_in_image(v.unsqueeze(1), pred["boxes"], o_im_s)
+
+                    # return v.softmax(0).argmax(0) * 255 / num_bins
+                    return v
+                nocs = torch.cat([process_nocs_dim(pred["nocs"]["x"]),
+                                 process_nocs_dim(pred["nocs"]["y"]),
+                                 process_nocs_dim(pred["nocs"]["z"])],
+                                 dim=1)
+
+                result[i]["nocs"] = nocs
+        return result
 
 
 def add_nocs_to_RoIHeads(heads:RoIHeads, nocs_ch_in=256, nocs_num_bins=32):
@@ -204,9 +246,9 @@ class RoIHeadsWithNocs(RoIHeads):
                 rcnn_loss_mask = maskrcnn_loss(mask_logits, mask_proposals, gt_masks, gt_labels, pos_matched_idxs)
                 loss_mask = {"loss_mask": rcnn_loss_mask}
 
+                # Add NOCS to Loss
                 if self.has_nocs():
                     gt_nocs = [t["nocs"] for t in targets]
-                    
                     loss_mask["loss_nocs"] = nocs_class_loss(nocs_results, 
                                                     mask_proposals, 
                                                     gt_masks, gt_nocs, 
@@ -217,6 +259,12 @@ class RoIHeadsWithNocs(RoIHeads):
                 masks_probs = maskrcnn_inference(mask_logits, labels)
                 for mask_prob, r in zip(masks_probs, result):
                     r["masks"] = mask_prob
+
+                # Add NOCS to results
+                if self.has_nocs():
+                    for r_idx, r in enumerate(result):
+                        r["nocs"] = nocs_results
+                        # r["nocs"] = {k:v[r_idx] for k, v in nocs_results.items()}
 
             losses.update(loss_mask)
 
@@ -270,19 +318,6 @@ class RoIHeadsWithNocs(RoIHeads):
             losses.update(loss_keypoint)
 
 
-        # if self.nocs_heads:
-        #     if not self.has_mask(): raise Exception("The mask head is needed for ")
-        #     nocs_results = {}
-        #     for key, layers in self.nocs_heads.items():
-        #         # TODO: same as mask head
-        #         x = layers['roi_align'](features, proposals, image_shapes)
-        #         x = layers['head'](x)
-        #         nocs_results[key] = layers['pred'](x)
-
-        #     for r_idx, r in enumerate(result):
-        #         r["nocs"] = {k:v[r_idx] for k, v in nocs_results.items()}
-
-
         return result, losses
     
 
@@ -298,8 +333,3 @@ class RoIHeadsWithNocs(RoIHeads):
         """
         Given nocs feature return the nocs values
         """
-
-def nocs_class_loss(**kwargs):
-    print('NOT YET IMPLEMENTED')
-    print(f'recieved {kwargs.keys()}')
-        

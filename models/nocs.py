@@ -1,30 +1,8 @@
 import torch
 
-from models.nocs_roi_heads import RoIHeadsWithNocs, add_nocs_to_RoIHeads
+from models.nocs_roi_heads import RoIHeadsWithNocs, add_nocs_to_RoIHeads, GeneralizedRCNNTransformWithNocs
 from torchvision.models.detection.mask_rcnn import MaskRCNN
 
-def discretize_nocs(mast_gt_nocs):
-# TODO ################################################
-    pass
-
-def nocs_map_loss(gt_mask, gt_nocs, pred_nocs):
-# TODO ################################################
-# NOTE: maybe instead of feeding in gt_nocs, we can 
-#       feed in the discretized version of it.
-    '''
-    Takes in an instance segmentation mask along with
-    the ground truth and predicted nocs maps. 
-
-    Args: 
-        gt_mask [B, C, H, W] (uint8): instance segmentation
-        gt_nocs [B, 3, H, W] (uint8): ground truth nocs with 
-                channel values 0-255.
-        pred_nocs [B, 3, C, H, W] (bool): Discretized classification
-                of the nocs map. C here indicates number of bins.
-    
-    returns [N]: A dictionary of lists containing loss values
-    '''
-    pass
 
 class NOCS(MaskRCNN):
     def __init__(
@@ -106,9 +84,14 @@ class NOCS(MaskRCNN):
             mask_predictor,
             **kwargs,
         )
-        self.roi_heads:RoIHeadsWithNocs = add_nocs_to_RoIHeads(self.roi_heads )
+        
+        self.roi_heads:RoIHeadsWithNocs = add_nocs_to_RoIHeads(self.roi_heads)
 
-    # def forward(self, images, targets=None):
-    #     mask_rcnn_results = MaskRCNN.forward(self, images, targets)
-    #     return mask_rcnn_results
-
+        # Update Transforms to include NOCS
+        if image_mean is None: image_mean = [0.485, 0.456, 0.406]
+        if image_std is None: image_std = [0.229, 0.224, 0.225]
+        self.transform = GeneralizedRCNNTransformWithNocs(min_size=min_size, 
+                                                          max_size=max_size, 
+                                                          image_mean=image_mean, 
+                                                          image_std=image_std, 
+                                                          **kwargs)
