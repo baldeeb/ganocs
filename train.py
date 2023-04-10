@@ -38,6 +38,16 @@ def get_data():
     
     return dataset
 
+
+
+
+
+def show_image(im):
+    import matplotlib.pyplot as plt
+    plt.imshow(im)
+    plt.show()
+
+
 if __name__=='__main__':
 
     # Initialize Model
@@ -51,9 +61,9 @@ if __name__=='__main__':
     # Run loop
     for images, targets in dataset:
         predictions = m([images])
+        
+        # Display the predicted nocs map
+        show_image(predictions[0]['nocs'].sum(dim=0).permute(1,2,0).detach().numpy())
         print('done')
         break
 
-
-def show_image(im):
-    pass
