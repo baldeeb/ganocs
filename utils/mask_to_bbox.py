@@ -12,9 +12,9 @@ def mask2bbox(mask, flatten=False):
     bboxes = []
     for idx in np.unique(idxs):
         i, j = i_s[idxs == idx], j_s[idxs == idx]
-        i_ext = np.array([i.min(), i.max()])
-        j_ext = np.array([j.min(), j.max()])
-        bboxes.append(np.array([j_ext[0], i_ext[0], j_ext[1]-j_ext[0], i_ext[1]-i_ext[0]]))
+        box = np.array([j.min(), i.min(), j.max(), i.max()])
+        bboxes.append(box)
+
     bboxes = np.stack(bboxes)
     if flatten is False: bboxes = bboxes.reshape(*s, 4)
     return bboxes

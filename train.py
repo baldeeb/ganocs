@@ -1,69 +1,72 @@
-
-import torch
-import torchvision
-from pathlib import Path
-from torchvision.transforms import (
-    RandomCrop,
-    Normalize, 
-    ToTensor,
-    RandomHorizontalFlip, 
-    Compose
-)
+from models.nocs import NOCS
 from torchvision.models import ResNet50_Weights
 from torchvision.models.detection.backbone_utils import resnet_fpn_backbone    
-
-from torch.utils.data import DataLoader
-
-from models.nocs import NOCS
 from torchvision.models.detection.mask_rcnn import MaskRCNN
 
+from habitat_data_util.utils.dataset import HabitatDataloader
+from torch.utils.data import DataLoader
 
-def get_data():
+from utils.mask_to_bbox import mask2bbox
+import numpy as np
+import torch
 
-    # Data directory
-    # ## Laptop
-    # DATA_FOLDER = Path(__file__).resolve().parent / 'data'
-    # IMG_FOLDER = Path('train')
-    # ANNOTATION_FOLDER = Path('annotations_trainval2017/annotations/instances_train2017.json')
-    ## Lab PC
-    DATA_FOLDER = Path('/home/baldeeb/Data/cocodataset/')
-    IMG_FOLDER = Path('val2017')
-    ANNOTATION_FOLDER = Path('annotations_trainval2017/annotations/instances_val2017.json')
-    
-    # Data
-    dataset = torchvision.datasets.CocoDetection(
-                                DATA_FOLDER/IMG_FOLDER
-                                ,DATA_FOLDER/ANNOTATION_FOLDER
-                                ,transform=ToTensor())
-    
-    return dataset
+# Initialize Model
+backbone = resnet_fpn_backbone('resnet50', ResNet50_Weights.DEFAULT)
+# model = NOCS(backbone, 2)
+model = MaskRCNN(backbone, 2)
+
+def labels2masks(labels):
+    '''Creates a mask for each label in labels'''
+    masks = []
+    for label in np.unique(labels):
+        masks.append(labels == label)
+    return np.stack(masks)
 
 
 
+# Load data    
+def collate_fn(batch):
+    rgb = np.array([v[0]['image']/255.0 for v in batch])
+    rgb = torch.as_tensor(rgb).permute(0, 3, 1, 2).float()
+    targets = []
+    for data in batch:
+        images, meta = data[0], data[1]
+        depth = torch.as_tensor(images['depth']).unsqueeze(1)
+        boxes = torch.as_tensor(mask2bbox(images['semantics']).astype(np.int64))
+        semantics = torch.as_tensor(images['semantics'].astype(np.int64)).unsqueeze(1)
+        semantic_ids = torch.as_tensor([v['semantic_id'] for v in meta['objects'].values()])
+        masks = torch.as_tensor(labels2masks(semantics))
+        targets.append({
+            'depth': depth, 'masks': masks,
+            'labels': semantics, 'boxes': boxes, 
+            'semantic_ids': semantic_ids,})
+
+    return rgb, targets
+
+habitatdata = HabitatDataloader("/home/baldeeb/Code/pytorch-NOCS/data/habitat-generated/00847-bCPU9suPUw9/metadata.json")
+dataloader = DataLoader(habitatdata, batch_size=1, shuffle=True, collate_fn=collate_fn)
 
 
-def show_image(im):
-    import matplotlib.pyplot as plt
-    plt.imshow(im)
-    plt.show()
+# for data, meta in dataloader:
+#     labels = [v['semantic_id'] for v in meta['objects'].values()]
+#     targets={
+#         'boxes': mask2bbox(data['semantics']).astype(np.uint8),
+#         'labels': data['semantics'],
+#         # 'labels': meta['semantics'],
+#     }
 
+device='cuda'
+def targets2device(targets, device):
+    for i in range(len(targets)): 
+        for k in ['masks', 'labels', 'boxes']: 
+            targets[i][k] = targets[i][k].to(device)
+model.train()
+model.to(device)
+for images, targets in dataloader:
+    images = images.to(device)
+    targets = targets2device(targets, device)
+    predictions = model(images, targets)
+    print(predictions)
+    break
 
-if __name__=='__main__':
-
-    # Initialize Model
-    backbone = resnet_fpn_backbone('resnet50', ResNet50_Weights.DEFAULT)
-    m = NOCS(backbone, 2)
-    # m = MaskRCNN(backbone, 2)
-    m.eval()
-
-    dataset = get_data()
-
-    # Run loop
-    for images, targets in dataset:
-        predictions = m([images])
-        
-        # Display the predicted nocs map
-        show_image(predictions[0]['nocs'].sum(dim=0).permute(1,2,0).detach().numpy())
-        print('done')
-        break
 

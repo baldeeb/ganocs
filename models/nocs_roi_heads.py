@@ -14,7 +14,7 @@ from torchvision.models.detection.transform import (GeneralizedRCNNTransform,
                                                     resize_boxes, 
                                                     paste_masks_in_image)
 
-from models.nocs_loss import nocs_class_loss
+from models.nocs_loss import nocs_loss
 
 class GeneralizedRCNNTransformWithNocs(GeneralizedRCNNTransform):
     '''
@@ -127,14 +127,14 @@ class RoIHeadsWithNocs(RoIHeads):
         layers = (256, 256, 256, 256, 256)
 
         # TODO: pass in as param
-        self.nocs_heads = {}
+        self.nocs_heads = nn.ModuleDict()
         for k in ['x', 'y', 'z']:
             self.nocs_heads[k] = nn.ModuleDict({
-                'roi_align': MultiScaleRoIAlign(
-                                featmap_names=["0", "1", 
-                                               "2", "3"], 
-                                output_size=14, 
-                                sampling_ratio=2),
+                # 'roi_align': MultiScaleRoIAlign(
+                #                 featmap_names=["0", "1", 
+                #                                "2", "3"], 
+                #                 output_size=14, 
+                #                 sampling_ratio=2),
                 'head': MaskRCNNHeads(in_channels, 
                                       layers[:-1], 
                                       dilation=1),
@@ -249,8 +249,8 @@ class RoIHeadsWithNocs(RoIHeads):
                 # Add NOCS to Loss
                 if self.has_nocs():
                     gt_nocs = [t["nocs"] for t in targets]
-                    loss_mask["loss_nocs"] = nocs_class_loss(nocs_results, 
-                                                    mask_proposals, 
+                    # matched_nocs = [gt_nocs[i][pos_matched_idxs[i]] for i in range(len(gt_nocs))]
+                    loss_mask["loss_nocs"] = nocs_loss(nocs_results, 
                                                     gt_masks, gt_nocs, 
                                                     pos_matched_idxs)
 

@@ -1,8 +1,5 @@
 from torch.nn.functional import binary_cross_entropy_with_logits as bce_loss
 
-def discretize_nocs(mast_gt_nocs):
-# TODO ################################################
-    pass
 
 def nocs_loss(gt_mask, gt_nocs, pred_nocs):
     '''
