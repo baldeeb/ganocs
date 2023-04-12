@@ -12,17 +12,15 @@ import torch
 
 # Initialize Model
 backbone = resnet_fpn_backbone('resnet50', ResNet50_Weights.DEFAULT)
-# model = NOCS(backbone, 2)
-model = MaskRCNN(backbone, 2)
+model = NOCS(backbone, 2)
+# model = MaskRCNN(backbone, 2)
 
 def labels2masks(labels):
     '''Creates a mask for each label in labels'''
     masks = []
     for label in np.unique(labels):
         masks.append(labels == label)
-    return np.stack(masks)
-
-
+    return np.stack(masks, axis=1)
 
 # Load data    
 def collate_fn(batch):
@@ -31,39 +29,37 @@ def collate_fn(batch):
     targets = []
     for data in batch:
         images, meta = data[0], data[1]
-        depth = torch.as_tensor(images['depth']).unsqueeze(1)
-        boxes = torch.as_tensor(mask2bbox(images['semantics']).astype(np.int64))
-        semantics = torch.as_tensor(images['semantics'].astype(np.int64)).unsqueeze(1)
-        semantic_ids = torch.as_tensor([v['semantic_id'] for v in meta['objects'].values()])
-        masks = torch.as_tensor(labels2masks(semantics))
+        depth = torch.as_tensor(images['depth']).unsqueeze(0)
+        boxes, labels = mask2bbox(images['semantics'])
+        boxes = torch.as_tensor(boxes.astype(np.int64))
+        labels = torch.as_tensor(labels.astype(np.int64))
+        masks = torch.as_tensor(labels2masks(images['semantics']))
+        # semantics = torch.as_tensor(images['semantics'].astype(np.int64)).unsqueeze(0)
+        # semantic_ids = torch.as_tensor([v['semantic_id'] for v in meta['objects'].values()])
         targets.append({
             'depth': depth, 'masks': masks,
-            'labels': semantics, 'boxes': boxes, 
-            'semantic_ids': semantic_ids,})
+            'labels': labels, 'boxes': boxes, 
+            # 'semantic_ids': semantic_ids,
+            })
 
     return rgb, targets
 
 habitatdata = HabitatDataloader("/home/baldeeb/Code/pytorch-NOCS/data/habitat-generated/00847-bCPU9suPUw9/metadata.json")
 dataloader = DataLoader(habitatdata, batch_size=1, shuffle=True, collate_fn=collate_fn)
 
-
-# for data, meta in dataloader:
-#     labels = [v['semantic_id'] for v in meta['objects'].values()]
-#     targets={
-#         'boxes': mask2bbox(data['semantics']).astype(np.uint8),
-#         'labels': data['semantics'],
-#         # 'labels': meta['semantics'],
-#     }
-
 device='cuda'
 def targets2device(targets, device):
     for i in range(len(targets)): 
         for k in ['masks', 'labels', 'boxes']: 
+            print(k, targets[i][k].shape)
             targets[i][k] = targets[i][k].to(device)
+    return targets
+
 model.train()
 model.to(device)
 for images, targets in dataloader:
     images = images.to(device)
+    print(images.shape)
     targets = targets2device(targets, device)
     predictions = model(images, targets)
     print(predictions)
