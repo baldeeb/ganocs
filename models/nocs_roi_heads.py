@@ -1,88 +1,19 @@
-from typing import Any, Callable, List, Optional, Tuple, Union, Dict
+from typing import List, Optional, Tuple, Dict
 
 import torch 
 from torch import nn, Tensor
-
-from torchvision.ops import MultiScaleRoIAlign
 from torchvision.models.detection.roi_heads import (
-    RoIHeads, fastrcnn_loss,
-    maskrcnn_loss, maskrcnn_inference,
+    RoIHeads, 
+    fastrcnn_loss,
+    maskrcnn_loss, 
+    maskrcnn_inference,
     keypointrcnn_loss, keypointrcnn_inference,
     )
-from torchvision.models.detection.mask_rcnn import MaskRCNN, MaskRCNNHeads, MaskRCNNPredictor
-from torchvision.models.detection.transform import (GeneralizedRCNNTransform, 
-                                                    resize_boxes, 
-                                                    paste_masks_in_image)
-
-from models.nocs_loss import nocs_loss
-
-class GeneralizedRCNNTransformWithNocs(GeneralizedRCNNTransform):
-    '''
-    Expands GeneralizaleRCNNTransforms to include NOCS postprocessing.
-    This class explicitly calls postprocessing as is called by RCNN
-    '''
-    def __init__(self, **kwargs):
-        super().__init__(**kwargs)
-    
-    def postprocess(
-        self,
-        result: List[Dict[str, Tensor]],
-        image_shapes: List[Tuple[int, int]],
-        original_image_sizes: List[Tuple[int, int]],
-    ) -> List[Dict[str, Tensor]]:
-        result = GeneralizedRCNNTransform.postprocess(self, 
-                                                      result, 
-                                                      image_shapes, 
-                                                      original_image_sizes)
-        if self.training: return result
-        
-        for i, (pred, o_im_s) in enumerate(zip(result, original_image_sizes)):
-            if "nocs" in pred:
-                num_bins =  pred["nocs"]["x"].shape[0]
-                def process_nocs_dim(v):
-                    v = v.softmax(0).argmax(1) / num_bins
-                    v = paste_masks_in_image(v.unsqueeze(1), pred["boxes"], o_im_s)
-
-                    # return v.softmax(0).argmax(0) * 255 / num_bins
-                    return v
-                nocs = torch.cat([process_nocs_dim(pred["nocs"]["x"]),
-                                 process_nocs_dim(pred["nocs"]["y"]),
-                                 process_nocs_dim(pred["nocs"]["z"])],
-                                 dim=1)
-
-                result[i]["nocs"] = nocs
-        return result
-
-
-def add_nocs_to_RoIHeads(heads:RoIHeads, nocs_ch_in=256, nocs_num_bins=32):
-    return RoIHeadsWithNocs(
-        heads.box_roi_pool, 
-        heads.box_head,
-        heads.box_predictor,
-
-        heads.proposal_matcher.high_threshold,
-        heads.proposal_matcher.low_threshold,
-
-        heads.fg_bg_sampler.batch_size_per_image,
-        heads.fg_bg_sampler.positive_fraction,
-        
-        heads.box_coder.weights, 
-
-        heads.score_thresh,
-        heads.nms_thresh, 
-        heads.detections_per_img,
-
-        heads.mask_roi_pool, 
-        heads.mask_head,
-        heads.mask_predictor, 
-
-        heads.keypoint_roi_pool,
-        heads.keypoint_head,
-        heads.keypoint_predictor,
-
-        in_channels=nocs_ch_in,
-        num_bins=nocs_num_bins
+from torchvision.models.detection.mask_rcnn import (
+    MaskRCNNHeads,
+    MaskRCNNPredictor
     )
+from models.nocs_loss import nocs_loss
 
 
 class RoIHeadsWithNocs(RoIHeads):
@@ -130,11 +61,6 @@ class RoIHeadsWithNocs(RoIHeads):
         self.nocs_heads = nn.ModuleDict()
         for k in ['x', 'y', 'z']:
             self.nocs_heads[k] = nn.ModuleDict({
-                # 'roi_align': MultiScaleRoIAlign(
-                #                 featmap_names=["0", "1", 
-                #                                "2", "3"], 
-                #                 output_size=14, 
-                #                 sampling_ratio=2),
                 'head': MaskRCNNHeads(in_channels, 
                                       layers[:-1], 
                                       dilation=1),
@@ -229,7 +155,7 @@ class RoIHeadsWithNocs(RoIHeads):
                 mask_features = self.mask_roi_pool(features, mask_proposals, image_shapes)
 
                 if self.has_nocs():
-                    nocs_results = self._nocs_features(mask_features)
+                    nocs_proposals = self._nocs_features(mask_features)
 
                 mask_features = self.mask_head(mask_features)
                 mask_logits = self.mask_predictor(mask_features)
@@ -250,9 +176,9 @@ class RoIHeadsWithNocs(RoIHeads):
                 if self.has_nocs():
                     gt_nocs = [t["nocs"] for t in targets]
                     # matched_nocs = [gt_nocs[i][pos_matched_idxs[i]] for i in range(len(gt_nocs))]
-                    loss_mask["loss_nocs"] = nocs_loss(nocs_results, 
-                                                    gt_masks, gt_nocs, 
-                                                    pos_matched_idxs)
+                    loss_mask["loss_nocs"] = nocs_loss(gt_labels, gt_nocs, 
+                                                       nocs_proposals, mask_proposals,
+                                                       pos_matched_idxs)
 
             else:
                 labels = [r["labels"] for r in result]
@@ -262,9 +188,7 @@ class RoIHeadsWithNocs(RoIHeads):
 
                 # Add NOCS to results
                 if self.has_nocs():
-                    for r_idx, r in enumerate(result):
-                        r["nocs"] = nocs_results
-                        # r["nocs"] = {k:v[r_idx] for k, v in nocs_results.items()}
+                    for _, r in enumerate(result): r["nocs"] = nocs_proposals
 
             losses.update(loss_mask)
 
@@ -317,10 +241,8 @@ class RoIHeadsWithNocs(RoIHeads):
                     r["keypoints_scores"] = kps
             losses.update(loss_keypoint)
 
-
         return result, losses
     
-
     def _nocs_features(self, mask_features):
         nocs_results: Dict[str, torch.Tensor] = {}
         for key, layers in self.nocs_heads.items():
@@ -329,7 +251,33 @@ class RoIHeadsWithNocs(RoIHeads):
             nocs_results[key] = layers['pred'](x)
         return nocs_results
 
-    def _infer_nocs_from_bin(features):
-        """
-        Given nocs feature return the nocs values
-        """
+
+def add_nocs_to_RoIHeads(heads:RoIHeads, nocs_ch_in=256, nocs_num_bins=32):
+    return RoIHeadsWithNocs(
+        heads.box_roi_pool, 
+        heads.box_head,
+        heads.box_predictor,
+
+        heads.proposal_matcher.high_threshold,
+        heads.proposal_matcher.low_threshold,
+
+        heads.fg_bg_sampler.batch_size_per_image,
+        heads.fg_bg_sampler.positive_fraction,
+        
+        heads.box_coder.weights, 
+
+        heads.score_thresh,
+        heads.nms_thresh, 
+        heads.detections_per_img,
+
+        heads.mask_roi_pool, 
+        heads.mask_head,
+        heads.mask_predictor, 
+
+        heads.keypoint_roi_pool,
+        heads.keypoint_head,
+        heads.keypoint_predictor,
+
+        in_channels=nocs_ch_in,
+        num_bins=nocs_num_bins
+    )

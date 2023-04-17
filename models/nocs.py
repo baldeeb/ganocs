@@ -1,6 +1,5 @@
-import torch
-
-from models.nocs_roi_heads import RoIHeadsWithNocs, add_nocs_to_RoIHeads, GeneralizedRCNNTransformWithNocs
+from models.nocs_roi_heads import RoIHeadsWithNocs, add_nocs_to_RoIHeads
+from models.rcnn_transforms import GeneralizedRCNNTransformWithNocs
 from torchvision.models.detection.mask_rcnn import MaskRCNN
 
 
@@ -95,3 +94,53 @@ class NOCS(MaskRCNN):
                                                           image_mean=image_mean, 
                                                           image_std=image_std, 
                                                           **kwargs)
+
+
+
+
+from typing import Any, Optional
+
+from torch import nn
+
+from torchvision.models.detection.mask_rcnn import MaskRCNN_ResNet50_FPN_Weights
+from torchvision.models.detection.backbone_utils import _validate_trainable_layers, _resnet_fpn_extractor
+from torchvision.models.detection._utils import overwrite_eps
+
+from torchvision.models.resnet import resnet50, ResNet50_Weights
+from torchvision.models._utils import _ovewrite_value_param
+
+from torchvision.ops import misc as misc_nn_ops
+
+def get_nocs_resnet50_fpn(
+    *,
+    weights: Optional[MaskRCNN_ResNet50_FPN_Weights] = None,
+    progress: bool = True,
+    num_classes: Optional[int] = None,
+    weights_backbone: Optional[ResNet50_Weights] = ResNet50_Weights.IMAGENET1K_V1,
+    trainable_backbone_layers: Optional[int] = None,
+    **kwargs: Any,
+) -> NOCS:
+    weights = MaskRCNN_ResNet50_FPN_Weights.verify(weights)
+    weights_backbone = ResNet50_Weights.verify(weights_backbone)
+
+    if weights is not None:
+        weights_backbone = None
+        num_classes = _ovewrite_value_param("num_classes", num_classes, len(weights.meta["categories"]))
+    elif num_classes is None:
+        num_classes = 91
+
+    is_trained = weights is not None or weights_backbone is not None
+    trainable_backbone_layers = _validate_trainable_layers(is_trained, trainable_backbone_layers, 5, 3)
+    norm_layer = misc_nn_ops.FrozenBatchNorm2d if is_trained else nn.BatchNorm2d
+
+    backbone = resnet50(weights=weights_backbone, progress=progress, norm_layer=norm_layer)
+    backbone = _resnet_fpn_extractor(backbone, trainable_backbone_layers)
+    model = NOCS(backbone, num_classes=num_classes, **kwargs)
+
+    if weights is not None:
+        model.load_state_dict(weights.get_state_dict(progress=progress), 
+                              strict=False)
+        if weights == MaskRCNN_ResNet50_FPN_Weights.COCO_V1:
+            overwrite_eps(model, 0.0)
+
+    return model

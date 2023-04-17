@@ -5,64 +5,54 @@ from torchvision.models.detection.mask_rcnn import MaskRCNN
 
 from habitat_data_util.utils.dataset import HabitatDataloader
 from torch.utils.data import DataLoader
+from utils.dataset import collate_fn
 
-from utils.mask_to_bbox import mask2bbox
-import numpy as np
-import torch
-
-# Initialize Model
-backbone = resnet_fpn_backbone('resnet50', ResNet50_Weights.DEFAULT)
-model = NOCS(backbone, 2)
-# model = MaskRCNN(backbone, 2)
-
-def labels2masks(labels):
-    '''Creates a mask for each label in labels'''
-    masks = []
-    for label in np.unique(labels):
-        masks.append(labels == label)
-    return np.stack(masks, axis=1)
-
-# Load data    
-def collate_fn(batch):
-    rgb = np.array([v[0]['image']/255.0 for v in batch])
-    rgb = torch.as_tensor(rgb).permute(0, 3, 1, 2).float()
-    targets = []
-    for data in batch:
-        images, meta = data[0], data[1]
-        depth = torch.as_tensor(images['depth']).unsqueeze(0)
-        boxes, labels = mask2bbox(images['semantics'])
-        boxes = torch.as_tensor(boxes.astype(np.int64))
-        labels = torch.as_tensor(labels.astype(np.int64))
-        masks = torch.as_tensor(labels2masks(images['semantics']))
-        # semantics = torch.as_tensor(images['semantics'].astype(np.int64)).unsqueeze(0)
-        # semantic_ids = torch.as_tensor([v['semantic_id'] for v in meta['objects'].values()])
-        targets.append({
-            'depth': depth, 'masks': masks,
-            'labels': labels, 'boxes': boxes, 
-            # 'semantic_ids': semantic_ids,
-            })
-
-    return rgb, targets
-
-habitatdata = HabitatDataloader("/home/baldeeb/Code/pytorch-NOCS/data/habitat-generated/00847-bCPU9suPUw9/metadata.json")
-dataloader = DataLoader(habitatdata, batch_size=1, shuffle=True, collate_fn=collate_fn)
+from torch.optim import Adam
+import wandb
+from tqdm import tqdm
 
 device='cuda'
+
+# Initialize Model
+########################################################################
+if False:
+    backbone = resnet_fpn_backbone('resnet50', ResNet50_Weights.DEFAULT)
+    model = NOCS(backbone, 2)
+    model.to(device).train()
+else:
+    # NOTE: this is temporary test to make sure MaskRCNN works
+    # This helps debug the dataloader 
+    from torchvision.models.detection import maskrcnn_resnet50_fpn 
+    from torchvision.models.detection.faster_rcnn import FastRCNNPredictor
+    model = maskrcnn_resnet50_fpn(pretrained=True)  # load an instance segmentation model pre-trained pre-trained on COCO
+    in_features = model.roi_heads.box_predictor.cls_score.in_features  # get number of input features for the classifier
+    model.roi_heads.box_predictor = FastRCNNPredictor(in_features,num_classes=2)  # replace the pre-trained head with a new one
+    model.to(device)# move model to the right device
+    model.train()
+########################################################################
+
+habitatdata = HabitatDataloader("/home/baldeeb/Code/pytorch-NOCS/data/habitat-generated/00847-bCPU9suPUw9/metadata.json")
+dataloader = DataLoader(habitatdata, batch_size=20, shuffle=True, collate_fn=collate_fn)
+
 def targets2device(targets, device):
     for i in range(len(targets)): 
         for k in ['masks', 'labels', 'boxes']: 
-            print(k, targets[i][k].shape)
             targets[i][k] = targets[i][k].to(device)
     return targets
 
-model.train()
-model.to(device)
-for images, targets in dataloader:
-    images = images.to(device)
-    print(images.shape)
-    targets = targets2device(targets, device)
-    predictions = model(images, targets)
-    print(predictions)
-    break
+wandb.init(project="torch-nocs", name="first-tests-rcnn")
+optim = Adam(model.parameters(), lr=1e-4)
 
+for epoch in tqdm(range(100)):
+    for images, targets in dataloader:
+        images = images.to(device)
+        targets = targets2device(targets, device)
+        losses = model(images, targets)
+        loss = sum(losses.values())
+        optim.zero_grad()
+        loss.backward()
+        optim.step()
+        wandb.log(losses)
+        wandb.log({'loss': loss})
+    wandb.log({'epoch': epoch})
 

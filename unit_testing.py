@@ -18,6 +18,8 @@ from models.nocs import NOCS
 from torchvision.models.detection.mask_rcnn import MaskRCNN
 from pycocotools.coco import COCO 
 
+from models.nocs import get_nocs_resnet50_fpn
+from torchvision.models.detection.mask_rcnn import MaskRCNN_ResNet50_FPN_Weights
 
 def get_data():
     # Data directory
@@ -39,11 +41,11 @@ def get_data():
     return dataset, coco
 
 
-def show_image(im):
+def show_image(im, show=True):
     import matplotlib.pyplot as plt
     plt.figure()
     plt.imshow(im)
-    plt.show()
+    if show: plt.show()
 
 def get_boxes(targets):
     boxes = []
@@ -53,8 +55,8 @@ def get_boxes(targets):
 
 def test_inference():
     # Initialize Model
-    backbone = resnet_fpn_backbone('resnet50', ResNet50_Weights.DEFAULT)
-    m = NOCS(backbone, 2)
+    m = get_nocs_resnet50_fpn(
+        weights=MaskRCNN_ResNet50_FPN_Weights.DEFAULT)
     m.eval()
 
     # Load data
@@ -66,6 +68,7 @@ def test_inference():
         predictions = m([images])
 
         # Display the predicted nocs map
+        show_image(images[0], show=False)
         show_image(predictions[0]['nocs'].sum(dim=0).permute(1,2,0).detach().numpy())
         print('done')
         break
@@ -107,8 +110,8 @@ def test_loss():
 
 def test_training(): 
     # Initialize Model
-    backbone = resnet_fpn_backbone('resnet50', ResNet50_Weights.DEFAULT)
-    m = NOCS(backbone, 2)
+    m = get_nocs_resnet50_fpn(
+        weights=MaskRCNN_ResNet50_FPN_Weights.DEFAULT)
     m.train()
 
     # Load data
@@ -126,7 +129,16 @@ def test_training():
         print('done')
         break
 
+
+
+def load_pretrained_maskrcnn():
+    model = get_nocs_resnet50_fpn(
+        weights=MaskRCNN_ResNet50_FPN_Weights.DEFAULT)
+    model.eval()
+
 if __name__=='__main__':
-    test_inference()
-    # test_training()
+    # test_inference()
+    test_training()
     # test_loss()
+
+    # load_pretrained_maskrcnn()
