@@ -56,7 +56,7 @@ def get_boxes(targets):
 def test_inference():
     # Initialize Model
     m = get_nocs_resnet50_fpn(
-        weights=MaskRCNN_ResNet50_FPN_Weights.DEFAULT)
+        maskrcnn_weights=MaskRCNN_ResNet50_FPN_Weights.DEFAULT)
     m.eval()
 
     # Load data
@@ -111,7 +111,7 @@ def test_loss():
 def test_training(): 
     # Initialize Model
     m = get_nocs_resnet50_fpn(
-        weights=MaskRCNN_ResNet50_FPN_Weights.DEFAULT)
+        maskrcnn_weights=MaskRCNN_ResNet50_FPN_Weights.DEFAULT)
     m.train()
 
     # Load data
@@ -133,7 +133,7 @@ def test_training():
 
 def load_pretrained_maskrcnn():
     model = get_nocs_resnet50_fpn(
-        weights=MaskRCNN_ResNet50_FPN_Weights.DEFAULT)
+        maskrcnn_weights=MaskRCNN_ResNet50_FPN_Weights.DEFAULT)
     model.eval()
 
 if __name__=='__main__':

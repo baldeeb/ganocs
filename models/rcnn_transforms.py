@@ -1,7 +1,8 @@
 
 from torchvision.models.detection.transform import (GeneralizedRCNNTransform, 
                                                     resize_boxes, 
-                                                    paste_masks_in_image)
+                                                    paste_masks_in_image,
+                                                    ImageList)
 from typing import Any, Callable, List, Optional, Tuple, Union, Dict
 
 import torch 
@@ -15,6 +16,18 @@ class GeneralizedRCNNTransformWithNocs(GeneralizedRCNNTransform):
     def __init__(self, **kwargs):
         super().__init__(**kwargs)
     
+    def forward(self, images: List[Tensor], targets: Optional[List[Dict[str, Tensor]]] = None
+    ) -> Tuple[ImageList, Optional[List[Dict[str, Tensor]]]]:
+        images, targets = GeneralizedRCNNTransform.forward(self, images, targets)
+        if targets is not None: 
+            for i in range(len(targets)):
+                targets[i]['nocs'] = self.resize_nocs(targets[i]['nocs'])
+        return images, targets
+
+    def resize_nocs(self, nocs: Tensor):
+        nocs, _ = GeneralizedRCNNTransform.resize(self, nocs, None)
+        return nocs
+
     def postprocess(
         self,
         result: List[Dict[str, Tensor]],
@@ -26,12 +39,12 @@ class GeneralizedRCNNTransformWithNocs(GeneralizedRCNNTransform):
                                                       image_shapes, 
                                                       original_image_sizes)
         if self.training: return result
-
+        
         for i, (pred, o_im_s) in enumerate(zip(result, original_image_sizes)):
             if "nocs" in pred:
-                num_bins =  pred["nocs"]["x"].shape[0]
+                num_bins =  pred["nocs"]["x"].shape[1]
                 def process_nocs_dim(v):
-                    v = v.softmax(0).argmax(1) / num_bins
+                    v = v.softmax(1).argmax(1) / num_bins
                     v = paste_masks_in_image(v.unsqueeze(1), pred["boxes"], o_im_s)
 
                     # return v.softmax(0).argmax(0) * 255 / num_bins

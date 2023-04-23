@@ -113,23 +113,23 @@ from torchvision.ops import misc as misc_nn_ops
 
 def get_nocs_resnet50_fpn(
     *,
-    weights: Optional[MaskRCNN_ResNet50_FPN_Weights] = None,
+    maskrcnn_weights: Optional[MaskRCNN_ResNet50_FPN_Weights] = None,
     progress: bool = True,
     num_classes: Optional[int] = None,
     weights_backbone: Optional[ResNet50_Weights] = ResNet50_Weights.IMAGENET1K_V1,
     trainable_backbone_layers: Optional[int] = None,
     **kwargs: Any,
 ) -> NOCS:
-    weights = MaskRCNN_ResNet50_FPN_Weights.verify(weights)
+    maskrcnn_weights = MaskRCNN_ResNet50_FPN_Weights.verify(maskrcnn_weights)
     weights_backbone = ResNet50_Weights.verify(weights_backbone)
 
-    if weights is not None:
+    if maskrcnn_weights is not None:
         weights_backbone = None
-        num_classes = _ovewrite_value_param("num_classes", num_classes, len(weights.meta["categories"]))
+        num_classes = _ovewrite_value_param("num_classes", num_classes, len(maskrcnn_weights.meta["categories"]))
     elif num_classes is None:
         num_classes = 91
 
-    is_trained = weights is not None or weights_backbone is not None
+    is_trained = maskrcnn_weights is not None or weights_backbone is not None
     trainable_backbone_layers = _validate_trainable_layers(is_trained, trainable_backbone_layers, 5, 3)
     norm_layer = misc_nn_ops.FrozenBatchNorm2d if is_trained else nn.BatchNorm2d
 
@@ -137,10 +137,10 @@ def get_nocs_resnet50_fpn(
     backbone = _resnet_fpn_extractor(backbone, trainable_backbone_layers)
     model = NOCS(backbone, num_classes=num_classes, **kwargs)
 
-    if weights is not None:
-        model.load_state_dict(weights.get_state_dict(progress=progress), 
+    if maskrcnn_weights is not None:
+        model.load_state_dict(maskrcnn_weights.get_state_dict(progress=progress), 
                               strict=False)
-        if weights == MaskRCNN_ResNet50_FPN_Weights.COCO_V1:
+        if maskrcnn_weights == MaskRCNN_ResNet50_FPN_Weights.COCO_V1:
             overwrite_eps(model, 0.0)
 
     return model

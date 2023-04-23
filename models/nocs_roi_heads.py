@@ -188,7 +188,11 @@ class RoIHeadsWithNocs(RoIHeads):
 
                 # Add NOCS to results
                 if self.has_nocs():
-                    for _, r in enumerate(result): r["nocs"] = nocs_proposals
+                    _per_img = [b.shape[0] for b in boxes]
+                    for k in nocs_proposals.keys(): 
+                        nocs_proposals[k] = nocs_proposals[k].split(_per_img, dim=0)
+                    for i, r in enumerate(result): 
+                        r["nocs"] = {k:v[i] for k,v in nocs_proposals.items()}
 
             losses.update(loss_mask)
 

@@ -1,23 +1,25 @@
-from models.nocs import NOCS
+from models.nocs import NOCS, get_nocs_resnet50_fpn
 from torchvision.models import ResNet50_Weights
 from torchvision.models.detection.backbone_utils import resnet_fpn_backbone    
 from torchvision.models.detection.mask_rcnn import MaskRCNN
+from torchvision.models.detection.mask_rcnn import MaskRCNN_ResNet50_FPN_Weights
 
 from habitat_data_util.utils.dataset import HabitatDataloader
 from torch.utils.data import DataLoader
 from utils.dataset import collate_fn
 
 from torch.optim import Adam
-import wandb
+import torch 
+
 from tqdm import tqdm
+import wandb
 
-device='cuda'
-
+device='cuda:1'
+PATH='/home/baldeeb/Code/pytorch-NOCS/checkpoints/nocs.pth'
 # Initialize Model
 ########################################################################
-if False:
-    backbone = resnet_fpn_backbone('resnet50', ResNet50_Weights.DEFAULT)
-    model = NOCS(backbone, 2)
+if True:
+    model = get_nocs_resnet50_fpn(maskrcnn_weights=MaskRCNN_ResNet50_FPN_Weights.DEFAULT)
     model.to(device).train()
 else:
     # NOTE: this is temporary test to make sure MaskRCNN works
@@ -32,7 +34,7 @@ else:
 ########################################################################
 
 habitatdata = HabitatDataloader("/home/baldeeb/Code/pytorch-NOCS/data/habitat-generated/00847-bCPU9suPUw9/metadata.json")
-dataloader = DataLoader(habitatdata, batch_size=20, shuffle=True, collate_fn=collate_fn)
+dataloader = DataLoader(habitatdata, batch_size=2, shuffle=True, collate_fn=collate_fn)
 
 def targets2device(targets, device):
     for i in range(len(targets)): 
@@ -40,11 +42,11 @@ def targets2device(targets, device):
             targets[i][k] = targets[i][k].to(device)
     return targets
 
-wandb.init(project="torch-nocs", name="first-tests-rcnn")
+wandb.init(project="torch-nocs", name="post-fix")
 optim = Adam(model.parameters(), lr=1e-4)
 
 for epoch in tqdm(range(100)):
-    for images, targets in dataloader:
+    for itr, (images, targets) in enumerate(dataloader):
         images = images.to(device)
         targets = targets2device(targets, device)
         losses = model(images, targets)
@@ -52,7 +54,22 @@ for epoch in tqdm(range(100)):
         optim.zero_grad()
         loss.backward()
         optim.step()
+        
         wandb.log(losses)
         wandb.log({'loss': loss})
+
+        with torch.no_grad():
+            if itr % 10 == 0:
+                model.eval()
+                r = model(images)
+                _printable = lambda a: a.permute(1,2,0).detach().cpu().numpy()
+                nocs = r[0]['nocs']
+                wandb.log({
+                    'image': wandb.Image(_printable(images[0])),
+                    'nocs':wandb.Image(_printable(nocs[0]))
+                    })
+                model.train()
+
+    torch.save(model.state_dict(), PATH)
     wandb.log({'epoch': epoch})
 
