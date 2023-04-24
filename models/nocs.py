@@ -84,7 +84,10 @@ class NOCS(MaskRCNN):
             **kwargs,
         )
         
-        self.roi_heads:RoIHeadsWithNocs = add_nocs_to_RoIHeads(self.roi_heads)
+        self.roi_heads:RoIHeadsWithNocs = add_nocs_to_RoIHeads(
+                    self.roi_heads,
+                    nocs_num_bins=32,
+                    num_classes=2)
 
         # Update Transforms to include NOCS
         if image_mean is None: image_mean = [0.485, 0.456, 0.406]

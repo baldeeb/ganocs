@@ -42,6 +42,7 @@ class RoIHeadsWithNocs(RoIHeads):
         # NOCS
         in_channels=256,
         num_bins=32,
+        num_classes=2, 
     ):
         super().__init__(
             box_roi_pool, box_head, box_predictor,
@@ -56,7 +57,7 @@ class RoIHeadsWithNocs(RoIHeads):
         )
 
         layers = (256, 256, 256, 256, 256)
-
+        self._num_cls, self._num_bins = num_classes, num_bins
         # TODO: pass in as param
         self.nocs_heads = nn.ModuleDict()
         for k in ['x', 'y', 'z']:
@@ -67,8 +68,7 @@ class RoIHeadsWithNocs(RoIHeads):
                 'pred': nn.Sequential(
                             MaskRCNNPredictor(layers[-2], 
                                             layers[-1], 
-                                            num_bins),
-                            nn.Softmax()
+                                            num_bins*num_classes)
                         ) 
             })
 
@@ -188,6 +188,14 @@ class RoIHeadsWithNocs(RoIHeads):
 
                 # Add NOCS to results
                 if self.has_nocs():
+                    # Select the predicted labels
+                    catted = torch.cat(labels)
+                    index = torch.arange(catted.size(0))
+                    catted[catted>=self._num_cls] = 0
+                    nocs_proposals = {k:v[index, catted] for k,v in 
+                                      nocs_proposals.items()}
+
+                    # Split batch to batches
                     _per_img = [b.shape[0] for b in boxes]
                     for k in nocs_proposals.keys(): 
                         nocs_proposals[k] = nocs_proposals[k].split(_per_img, dim=0)
@@ -248,15 +256,30 @@ class RoIHeadsWithNocs(RoIHeads):
         return result, losses
     
     def _nocs_features(self, mask_features):
+        """
+        Args:
+            mask_features (torch.Tensor) of shape [B, C, H, W]
+                representing the region of interest.
+        Returns:
+            nocs_results (Dict[str, torch.Tensor]): each element
+                of the dict has shape [B, C, N, H, W], where C is
+                the number of classes predicted and N is the number
+                of bins used for this binary nocs predictor. 
+        """
+        B = mask_features.size(0)
         nocs_results: Dict[str, torch.Tensor] = {}
         for key, layers in self.nocs_heads.items():
             # TODO: same as mask head
             x = layers['head'](mask_features)
-            nocs_results[key] = layers['pred'](x)
+            x = layers['pred'](x)
+            nocs_results[key] = x.reshape(B, 
+                                    self._num_cls, 
+                                    self._num_bins,
+                                    *x.shape[-2:])
         return nocs_results
 
 
-def add_nocs_to_RoIHeads(heads:RoIHeads, nocs_ch_in=256, nocs_num_bins=32):
+def add_nocs_to_RoIHeads(heads:RoIHeads, nocs_ch_in=256, nocs_num_bins=32, num_classes=2):
     return RoIHeadsWithNocs(
         heads.box_roi_pool, 
         heads.box_head,
@@ -283,5 +306,6 @@ def add_nocs_to_RoIHeads(heads:RoIHeads, nocs_ch_in=256, nocs_num_bins=32):
         heads.keypoint_predictor,
 
         in_channels=nocs_ch_in,
-        num_bins=nocs_num_bins
+        num_bins=nocs_num_bins,
+        num_classes=num_classes
     )

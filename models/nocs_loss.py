@@ -2,6 +2,7 @@ import torch
 from torch.nn.functional import one_hot
 from torchvision.ops import boxes as box_ops, roi_align
 from torch.nn.functional import binary_cross_entropy_with_logits as bce_loss
+from torch.nn.functional import cross_entropy
 
 import cv2 
 import matplotlib.pyplot as plt 
@@ -50,9 +51,10 @@ def nocs_loss(gt_labels, gt_nocs, nocs_proposals, mask_proposals, matched_ids):
     Args: 
         nocs_proposals Dict[str, Tensor]: A dictionary of
                 tensors containing the predicted nocs maps:
-                - x [B, C, H, W] (float): x coordinate
-                - y [B, C, H, W] (float): y coordinate
-                - z [B, C, H, W] (float): z coordinate
+                - x [B, C, N, H, W] (float): x coordinate
+                - y [B, C, N, H, W] (float): y coordinate
+                - z [B, C, N, H, W] (float): z coordinate
+            Where C is the number of classes and N is bins.
         gt_nocs [3, H, W] (float): ground truth nocs with
                 values in [0, 1]
         
@@ -63,27 +65,23 @@ def nocs_loss(gt_labels, gt_nocs, nocs_proposals, mask_proposals, matched_ids):
     TODO: implement symmetry loss
     TODO: Experiment with
         - uing interpolation + relu as in relu grids and using an l2 loss
-        -  
     '''
-    proposals = torch.stack((nocs_proposals['x'], 
-                             nocs_proposals['y'], 
-                             nocs_proposals['z']), 
-                             dim=1)
-
-    # TODO: add category dimention
     labels = [gt_label[idxs] for gt_label, idxs 
               in zip(gt_labels, matched_ids)]
     labels = torch.cat(labels, dim=0)
-    
+    l_idxs = torch.arange(labels.size(0))
+    proposals = torch.stack((nocs_proposals['x'][l_idxs, labels], 
+                             nocs_proposals['y'][l_idxs, labels], 
+                             nocs_proposals['z'][l_idxs, labels]), 
+                             dim=1)
     nocs_targets = [
         project_on_boxes(m, p, i, proposals.shape[-1]) 
         for m, p, i in zip(gt_nocs, mask_proposals, matched_ids)
     ]
     nocs_targets = torch.cat(nocs_targets, dim=0)
     nocs_targets = (nocs_targets * proposals.shape[2]).round().long()  # To indices
-    targets = one_hot(nocs_targets, num_classes=proposals.shape[2])
-    targets = targets.permute(0, 1, -1, 2, 3).float()
+        
+    if nocs_targets.numel() == 0: return proposals.sum() * 0
     
-    if targets.numel() == 0: return proposals.sum() * 0
+    return cross_entropy(proposals.transpose(1,2), nocs_targets)
 
-    return bce_loss(proposals, targets) 

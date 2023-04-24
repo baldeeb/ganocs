@@ -42,7 +42,7 @@ def targets2device(targets, device):
             targets[i][k] = targets[i][k].to(device)
     return targets
 
-wandb.init(project="torch-nocs", name="post-fix")
+wandb.init(project="torch-nocs", name="adding_cls")
 optim = Adam(model.parameters(), lr=1e-4)
 
 for epoch in tqdm(range(100)):

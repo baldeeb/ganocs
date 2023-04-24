@@ -34,18 +34,25 @@ class GeneralizedRCNNTransformWithNocs(GeneralizedRCNNTransform):
         image_shapes: List[Tuple[int, int]],
         original_image_sizes: List[Tuple[int, int]],
     ) -> List[Dict[str, Tensor]]:
+        '''
+        The results are expected to contain a key 'nocs'
+        that is a torch.Tensor of shape [B, C, N, H, W]
+        where B is batch, C is number predictions, and N 
+        is the number of bins.
+        '''
         result = GeneralizedRCNNTransform.postprocess(self, 
                                                       result, 
                                                       image_shapes, 
                                                       original_image_sizes)
         if self.training: return result
-        
+
+        bin_index = 1        
         for i, (pred, o_im_s) in enumerate(zip(result, original_image_sizes)):
             if "nocs" in pred:
-                num_bins =  pred["nocs"]["x"].shape[1]
+                num_bins =  pred["nocs"]["x"].shape[bin_index]
                 def process_nocs_dim(v):
-                    v = v.softmax(1).argmax(1) / num_bins
-                    v = paste_masks_in_image(v.unsqueeze(1), pred["boxes"], o_im_s)
+                    v = v.argmax(bin_index) / num_bins 
+                    v = paste_masks_in_image(v.unsqueeze(bin_index), pred["boxes"], o_im_s)
 
                     # return v.softmax(0).argmax(0) * 255 / num_bins
                     return v
