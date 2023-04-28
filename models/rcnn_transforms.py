@@ -1,12 +1,9 @@
 
-from torchvision.models.detection.transform import (GeneralizedRCNNTransform, 
-                                                    resize_boxes, 
+from torchvision.models.detection.transform import (GeneralizedRCNNTransform,  
                                                     paste_masks_in_image,
                                                     ImageList)
-from typing import Any, Callable, List, Optional, Tuple, Union, Dict
-
-import torch 
-from torch import Tensor
+from typing import (List, Optional, Tuple, Dict)
+from torch import (Tensor, cat)
 
 class GeneralizedRCNNTransformWithNocs(GeneralizedRCNNTransform):
     '''
@@ -56,10 +53,10 @@ class GeneralizedRCNNTransformWithNocs(GeneralizedRCNNTransform):
 
                     # return v.softmax(0).argmax(0) * 255 / num_bins
                     return v
-                nocs = torch.cat([process_nocs_dim(pred["nocs"]["x"]),
-                                 process_nocs_dim(pred["nocs"]["y"]),
-                                 process_nocs_dim(pred["nocs"]["z"])],
-                                 dim=1)
+                nocs = cat([process_nocs_dim(pred["nocs"]["x"]),
+                            process_nocs_dim(pred["nocs"]["y"]),
+                            process_nocs_dim(pred["nocs"]["z"])],
+                            dim=1)
 
                 result[i]["nocs"] = nocs
         return result
