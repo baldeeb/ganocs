@@ -14,7 +14,7 @@ from torchvision.models.detection.mask_rcnn import (
     MaskRCNNPredictor
     )
 from models.nocs_loss import nocs_loss
-
+from models.nocs_util import select_labels
 
 class RoIHeadsWithNocs(RoIHeads):
     def __init__(
@@ -42,7 +42,7 @@ class RoIHeadsWithNocs(RoIHeads):
         # NOCS
         in_channels=256,
         num_bins=32,
-        num_classes=2, 
+        num_classes=91, 
     ):
         super().__init__(
             box_roi_pool, box_head, box_predictor,
@@ -189,12 +189,9 @@ class RoIHeadsWithNocs(RoIHeads):
                 # Add NOCS to results
                 if self.has_nocs():
                     # Select the predicted labels
-                    catted = torch.cat(labels)
-                    index = torch.arange(catted.size(0))
-                    catted[catted>=self._num_cls] = 0
-                    nocs_proposals = {k:v[index, catted] for k,v in 
-                                      nocs_proposals.items()}
-
+                    for i, l in enumerate(labels): 
+                        labels[i][l>self._num_cls] = 0
+                    nocs_proposals = select_labels(nocs_proposals, labels)
                     # Split batch to batches
                     _per_img = [b.shape[0] for b in boxes]
                     for k in nocs_proposals.keys(): 
@@ -278,34 +275,37 @@ class RoIHeadsWithNocs(RoIHeads):
                                     *x.shape[-2:])
         return nocs_results
 
+    @staticmethod
+    def from_torchvision_roiheads(heads:RoIHeads, nocs_num_bins=32):
+        '''Returns RoIHeadsWithNocs given an RoIHeads instance.'''
+        nocs_ch_in = heads.mask_head[0][0].in_channels
+        num_classes = heads.mask_predictor.mask_fcn_logits.out_channels
+        return RoIHeadsWithNocs(
+            heads.box_roi_pool, 
+            heads.box_head,
+            heads.box_predictor,
 
-def add_nocs_to_RoIHeads(heads:RoIHeads, nocs_ch_in=256, nocs_num_bins=32, num_classes=2):
-    return RoIHeadsWithNocs(
-        heads.box_roi_pool, 
-        heads.box_head,
-        heads.box_predictor,
+            heads.proposal_matcher.high_threshold,
+            heads.proposal_matcher.low_threshold,
 
-        heads.proposal_matcher.high_threshold,
-        heads.proposal_matcher.low_threshold,
+            heads.fg_bg_sampler.batch_size_per_image,
+            heads.fg_bg_sampler.positive_fraction,
+            
+            heads.box_coder.weights, 
 
-        heads.fg_bg_sampler.batch_size_per_image,
-        heads.fg_bg_sampler.positive_fraction,
-        
-        heads.box_coder.weights, 
+            heads.score_thresh,
+            heads.nms_thresh, 
+            heads.detections_per_img,
 
-        heads.score_thresh,
-        heads.nms_thresh, 
-        heads.detections_per_img,
+            heads.mask_roi_pool, 
+            heads.mask_head,
+            heads.mask_predictor, 
 
-        heads.mask_roi_pool, 
-        heads.mask_head,
-        heads.mask_predictor, 
+            heads.keypoint_roi_pool,
+            heads.keypoint_head,
+            heads.keypoint_predictor,
 
-        heads.keypoint_roi_pool,
-        heads.keypoint_head,
-        heads.keypoint_predictor,
-
-        in_channels=nocs_ch_in,
-        num_bins=nocs_num_bins,
-        num_classes=num_classes
-    )
+            in_channels=nocs_ch_in,
+            num_bins=nocs_num_bins,
+            num_classes=num_classes
+        )

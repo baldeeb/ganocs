@@ -3,7 +3,7 @@ from torch.nn.functional import one_hot
 from torchvision.ops import boxes as box_ops, roi_align
 from torch.nn.functional import binary_cross_entropy_with_logits as bce_loss
 from torch.nn.functional import cross_entropy
-
+from models.nocs_util import select_labels
 import cv2 
 import matplotlib.pyplot as plt 
 
@@ -68,12 +68,8 @@ def nocs_loss(gt_labels, gt_nocs, nocs_proposals, mask_proposals, matched_ids):
     '''
     labels = [gt_label[idxs] for gt_label, idxs 
               in zip(gt_labels, matched_ids)]
-    labels = torch.cat(labels, dim=0)
-    l_idxs = torch.arange(labels.size(0))
-    proposals = torch.stack((nocs_proposals['x'][l_idxs, labels], 
-                             nocs_proposals['y'][l_idxs, labels], 
-                             nocs_proposals['z'][l_idxs, labels]), 
-                             dim=1)
+    nocs_proposals = select_labels(nocs_proposals, labels)
+    proposals = torch.stack(tuple(nocs_proposals.values()), dim=1)
     nocs_targets = [
         project_on_boxes(m, p, i, proposals.shape[-1]) 
         for m, p, i in zip(gt_nocs, mask_proposals, matched_ids)

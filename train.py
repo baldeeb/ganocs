@@ -14,8 +14,14 @@ import torch
 from tqdm import tqdm
 import wandb
 
-device='cuda:1'
-PATH='/home/baldeeb/Code/pytorch-NOCS/checkpoints/nocs.pth'
+import pathlib as pl
+import os
+from time import time
+
+
+device='cuda:0'
+PATH = pl.Path(f'/home/baldeeb/Code/pytorch-NOCS/checkpoints/{time()}')
+os.makedirs(PATH)
 # Initialize Model
 ########################################################################
 if True:
@@ -63,13 +69,12 @@ for epoch in tqdm(range(100)):
                 model.eval()
                 r = model(images)
                 _printable = lambda a: a.permute(1,2,0).detach().cpu().numpy()
-                nocs = r[0]['nocs']
                 wandb.log({
                     'image': wandb.Image(_printable(images[0])),
-                    'nocs':wandb.Image(_printable(nocs[0]))
+                    'nocs':wandb.Image(_printable(r[0]['nocs'][0]))
                     })
                 model.train()
 
-    torch.save(model.state_dict(), PATH)
+    torch.save(model.state_dict(), PATH/f'{epoch}.pth')
     wandb.log({'epoch': epoch})
 
