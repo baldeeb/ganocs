@@ -1,4 +1,4 @@
-from models.nocs_roi_heads import RoIHeadsWithNocs, add_nocs_to_RoIHeads
+from models.nocs_roi_heads import RoIHeadsWithNocs
 from models.rcnn_transforms import GeneralizedRCNNTransformWithNocs
 from torchvision.models.detection.mask_rcnn import MaskRCNN
 
@@ -42,6 +42,9 @@ class NOCS(MaskRCNN):
         mask_roi_pool=None,
         mask_head=None,
         mask_predictor=None,
+        # NOCS parameters
+        nocs_bins=32,
+        # Others
         **kwargs,
     ):
         super().__init__(
@@ -83,11 +86,10 @@ class NOCS(MaskRCNN):
             mask_predictor,
             **kwargs,
         )
-        
-        self.roi_heads:RoIHeadsWithNocs = add_nocs_to_RoIHeads(
-                    self.roi_heads,
-                    nocs_num_bins=32,
-                    num_classes=2)
+        self.roi_heads = RoIHeadsWithNocs.from_torchvision_roiheads(
+                                                    self.roi_heads,
+                                                    nocs_num_bins=nocs_bins
+                                                )
 
         # Update Transforms to include NOCS
         if image_mean is None: image_mean = [0.485, 0.456, 0.406]
