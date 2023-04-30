@@ -43,6 +43,7 @@ class RoIHeadsWithNocs(RoIHeads):
         in_channels=256,
         num_bins=32,
         num_classes=91, 
+        cache_results=False  # retains results at training
     ):
         super().__init__(
             box_roi_pool, box_head, box_predictor,
@@ -56,6 +57,7 @@ class RoIHeadsWithNocs(RoIHeads):
             keypoint_roi_pool, keypoint_head, keypoint_predictor,
         )
 
+        self.cache_results, self.cache = cache_results, None
         layers = (256, 256, 256, 256, 256)
         self._num_cls, self._num_bins = num_classes, num_bins
         # TODO: pass in as param
@@ -74,6 +76,24 @@ class RoIHeadsWithNocs(RoIHeads):
 
     def has_nocs(self): 
         return self.nocs_heads is not None
+
+
+    def _reallocate_allocate(self, x):
+        '''This function is to be called on results when not training or
+        when training and caching.'''
+        if not self.training:
+            return x
+        elif self.cache_results: 
+            if isinstance(x, dict):
+                return {k:self._reallocate_allocate(v)
+                        for k,v in x.items()}
+            if isinstance(x, list): 
+                return [self._reallocate_allocate(xi)
+                        for xi in x]
+            else: return x.clone().detach().cpu()
+        else:
+            raise RuntimeError('Missuse of function.')
+
 
     def forward(
             self,
@@ -122,15 +142,15 @@ class RoIHeadsWithNocs(RoIHeads):
                 raise ValueError("regression_targets cannot be None")
             loss_classifier, loss_box_reg = fastrcnn_loss(class_logits, box_regression, labels, regression_targets)
             losses = {"loss_classifier": loss_classifier, "loss_box_reg": loss_box_reg}
-        else:
+        if not self.training or self.cache_results:
             boxes, scores, labels = self.postprocess_detections(class_logits, box_regression, proposals, image_shapes)
             num_images = len(boxes)
             for i in range(num_images):
                 result.append(
                     {
-                        "boxes": boxes[i],
-                        "labels": labels[i],
-                        "scores": scores[i],
+                        "boxes":  self._reallocate_allocate(boxes[i]),
+                        "labels": self._reallocate_allocate(labels[i]),
+                        "scores": self._reallocate_allocate(scores[i]),
                     }
                 )
 
@@ -148,6 +168,10 @@ class RoIHeadsWithNocs(RoIHeads):
                     pos = torch.where(labels[img_id] > 0)[0]
                     mask_proposals.append(proposals[img_id][pos])
                     pos_matched_idxs.append(matched_idxs[img_id][pos])
+
+                if self.cache_results:
+                    v = self._reallocate_allocate(pos_matched_idxs)
+                    for i, vi in enumerate(v): result[i]['pos_matched_idxs'] = vi
             else:
                 pos_matched_idxs = None
 
@@ -175,29 +199,35 @@ class RoIHeadsWithNocs(RoIHeads):
                 # Add NOCS to Loss
                 if self.has_nocs():
                     gt_nocs = [t["nocs"] for t in targets]
-                    # matched_nocs = [gt_nocs[i][pos_matched_idxs[i]] for i in range(len(gt_nocs))]
+
+                    reduction = 'none' if self.cache_results else 'mean'
                     loss_mask["loss_nocs"] = nocs_loss(gt_labels, gt_nocs, 
                                                        nocs_proposals, mask_proposals,
-                                                       pos_matched_idxs)
+                                                       pos_matched_idxs,
+                                                       reduction=reduction)
+                    if self.cache_results:
+                        split_loss = self._separate_image_results(loss_mask['loss_nocs'], labels)
+                        split_nocs = self._separate_image_results(nocs_proposals, labels)
+                        for i in range(len(result)):
+                            result[i]['nocs'] = {k:self._reallocate_allocate(v[i]) 
+                                                 for k, v in split_nocs.items()}
+                            obj_loss = split_loss[i].mean((1,2,3))
+                            result[i]['loss_nocs'] = self._reallocate_allocate(obj_loss)
+
+                        loss_mask["loss_nocs"] = torch.mean(loss_mask["loss_nocs"])
+                        
 
             else:
                 labels = [r["labels"] for r in result]
                 masks_probs = maskrcnn_inference(mask_logits, labels)
                 for mask_prob, r in zip(masks_probs, result):
                     r["masks"] = mask_prob
-
+                
                 # Add NOCS to results
                 if self.has_nocs():
-                    # Select the predicted labels
-                    for i, l in enumerate(labels): 
-                        labels[i][l>self._num_cls] = 0
-                    nocs_proposals = select_labels(nocs_proposals, labels)
-                    # Split batch to batches
-                    _per_img = [b.shape[0] for b in boxes]
-                    for k in nocs_proposals.keys(): 
-                        nocs_proposals[k] = nocs_proposals[k].split(_per_img, dim=0)
-                    for i, r in enumerate(result): 
-                        r["nocs"] = {k:v[i] for k,v in nocs_proposals.items()}
+                    nocs_maps = self._nocs_map(nocs_proposals, labels)
+                    for n, r in zip(nocs_maps, result):
+                        r['nocs'] = n
 
             losses.update(loss_mask)
 
@@ -250,8 +280,36 @@ class RoIHeadsWithNocs(RoIHeads):
                     r["keypoints_scores"] = kps
             losses.update(loss_keypoint)
 
+        if self.cache_results and self.training: self.cache = result
         return result, losses
     
+
+    def _separate_image_results(self, source, reference):
+        '''splits the first dimention of source based on 
+        the first 2 dimensions of the reference.'''
+        _per_img = [b.shape[0] for b in reference]
+        if isinstance(source, torch.Tensor):
+            return source.split(_per_img)
+        elif isinstance(source, dict):
+            for k, v in source.items(): 
+                source[k] = v.split(_per_img)
+            return source
+
+
+
+    def _nocs_map(self, nocs_proposals, labels):
+
+        # Select the predicted labels
+        for i, l in enumerate(labels):
+            labels[i][l>self._num_cls] = 0
+        nocs_proposals = select_labels(nocs_proposals, 
+                                       labels)
+        # Split batch to batches
+        nocs_proposals = self._separate_image_results(nocs_proposals, 
+                                                      labels)
+        return [{k:v[i] for k,v in nocs_proposals.items()} 
+                for i in range(len(labels))]
+
     def _nocs_features(self, mask_features):
         """
         Args:
@@ -266,7 +324,6 @@ class RoIHeadsWithNocs(RoIHeads):
         B = mask_features.size(0)
         nocs_results: Dict[str, torch.Tensor] = {}
         for key, layers in self.nocs_heads.items():
-            # TODO: same as mask head
             x = layers['head'](mask_features)
             x = layers['pred'](x)
             nocs_results[key] = x.reshape(B, 
@@ -276,7 +333,9 @@ class RoIHeadsWithNocs(RoIHeads):
         return nocs_results
 
     @staticmethod
-    def from_torchvision_roiheads(heads:RoIHeads, nocs_num_bins=32):
+    def from_torchvision_roiheads(heads:RoIHeads, 
+                                  nocs_num_bins=32, 
+                                  **kwargs):
         '''Returns RoIHeadsWithNocs given an RoIHeads instance.'''
         nocs_ch_in = heads.mask_head[0][0].in_channels
         num_classes = heads.mask_predictor.mask_fcn_logits.out_channels
@@ -307,5 +366,7 @@ class RoIHeadsWithNocs(RoIHeads):
 
             in_channels=nocs_ch_in,
             num_bins=nocs_num_bins,
-            num_classes=num_classes
+            num_classes=num_classes,
+
+            **kwargs
         )

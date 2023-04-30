@@ -43,7 +43,9 @@ def project_on_boxes(gt, boxes, matched_idxs, M):
     gt = gt.unsqueeze(0).to(rois)
     return roi_align(gt, rois, (M, M), 1.0)
 
-def nocs_loss(gt_labels, gt_nocs, nocs_proposals, mask_proposals, matched_ids):
+def nocs_loss(gt_labels, gt_nocs, 
+              nocs_proposals, mask_proposals, 
+              matched_ids, reduction='mean'):
     '''
     Takes in an instance segmentation mask along with
     the ground truth and predicted nocs maps. 
@@ -57,8 +59,7 @@ def nocs_loss(gt_labels, gt_nocs, nocs_proposals, mask_proposals, matched_ids):
             Where C is the number of classes and N is bins.
         gt_nocs [3, H, W] (float): ground truth nocs with
                 values in [0, 1]
-        
-
+        reduction (str): pytorch's cross entropy reduction.
     
     returns [N]: A dictionary of lists containing loss values
     
@@ -79,5 +80,7 @@ def nocs_loss(gt_labels, gt_nocs, nocs_proposals, mask_proposals, matched_ids):
         
     if nocs_targets.numel() == 0: return proposals.sum() * 0
     
-    return cross_entropy(proposals.transpose(1,2), nocs_targets)
+    return cross_entropy(proposals.transpose(1,2), 
+                         nocs_targets,
+                         reduction=reduction)
 

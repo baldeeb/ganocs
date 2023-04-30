@@ -1,7 +1,7 @@
 from models.nocs_roi_heads import RoIHeadsWithNocs
 from models.rcnn_transforms import GeneralizedRCNNTransformWithNocs
 from torchvision.models.detection.mask_rcnn import MaskRCNN
-
+import torch 
 
 class NOCS(MaskRCNN):
     def __init__(
@@ -44,9 +44,14 @@ class NOCS(MaskRCNN):
         mask_predictor=None,
         # NOCS parameters
         nocs_bins=32,
+        cache_results=False,
         # Others
         **kwargs,
     ):
+        '''
+        Args:
+            cache_results (bool): indicates whether, at training time, the model
+                should keep track of results that would be returned in eval mode.'''
         super().__init__(
             backbone,
             num_classes,
@@ -88,17 +93,37 @@ class NOCS(MaskRCNN):
         )
         self.roi_heads = RoIHeadsWithNocs.from_torchvision_roiheads(
                                                     self.roi_heads,
-                                                    nocs_num_bins=nocs_bins
-                                                )
-
+                                                    nocs_num_bins=nocs_bins,
+                                                    cache_results = cache_results)
+        self.cache = None
+        
         # Update Transforms to include NOCS
         if image_mean is None: image_mean = [0.485, 0.456, 0.406]
         if image_std is None: image_std = [0.229, 0.224, 0.225]
+        self._min_size, self._max_size = min_size, max_size
         self.transform = GeneralizedRCNNTransformWithNocs(min_size=min_size, 
                                                           max_size=max_size, 
                                                           image_mean=image_mean, 
                                                           image_std=image_std, 
                                                           **kwargs)
+    
+    def _updated_sizes(self, s):
+        if isinstance(s, list): return [self._updated_sizes(si) for si in s]
+        min_size = torch.min(s).to(dtype=torch.float32)
+        max_size = torch.max(s).to(dtype=torch.float32)
+        scale = torch.min(self._min_size / min_size, self._max_size / max_size)
+        return (s * scale).long()
+        
+    def forward(self, images, targets=None):
+        result = super().forward(images, targets)
+        if self.roi_heads.cache_results and self.training:
+            original_sizes = torch.FloatTensor([img.shape[-2:] for img in images])
+            new_size = self._updated_sizes(original_sizes)
+            self.cache = self.transform.full_postprocess(
+                                            self.roi_heads.cache, 
+                                            new_size,
+                                            original_sizes.long(),)
+        return result
 
 
 

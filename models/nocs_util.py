@@ -1,15 +1,12 @@
 from torch import cat, arange, Tensor, stack
-def select_labels(nocs_dict, labels):
+def select_labels(nocs_dict, 
+                  labels):
     '''
     Args:
         data (torch.Tensor): of shape [B, L, ...] where B
             is the batch size L is the labels one of which
             we need to retain.
         labels (List[int]): containing the supported labels
-        matches (List[int]): of shape [B] where each value
-            refers to the index of the labels vector. The
-            label at that index will be retained for each
-            batch element.
     '''
     l = cat(labels) - 1
     ids = arange(l.size(0), device=l.device)
@@ -21,7 +18,11 @@ def select_labels(nocs_dict, labels):
         nocs_dict[k] = v
     return nocs_dict
 
-def rotate_nocs(nocs:Tensor, masks:Tensor, rotation:Tensor, times:int=1):
+def rotate_nocs(nocs:Tensor, 
+                masks:Tensor, 
+                rotation:Tensor, 
+                times:int=1
+            )->Tensor:
     '''
     Args:
         nocs [B, 3, H, W]

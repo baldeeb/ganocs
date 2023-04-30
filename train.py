@@ -19,13 +19,41 @@ import os
 from time import time
 
 
+import cv2
+import numpy as np
+import json
+class SaveCachedNocsAndLoss():
+    def __init__(self, out_folder):
+        self._folder = out_folder
+        self._losses = {}
+    def __call__(self, epoch, cache):
+        for i, result in enumerate(cache):
+            for j, nocs in enumerate(result['nocs']):
+                f_name = f'{epoch}_{time()}_nocs.png'
+                img = nocs.permute(1,2,0).detach().cpu().numpy()
+                cv2.imwrite(f'{self._folder}/{f_name}', 
+                            (img*255).astype(np.uint8))
+
+                self._losses[f_name] = result['loss_nocs'][j].numpy().tolist()
+    
+    def save_losses(self):
+        f = open(f'{self._folder}/losses.json', 'w+')
+        json.dump(self._losses, f)
+        f.close()
+
+NOCS_SAVE_PATH = f'/home/baldeeb/Code/pytorch-NOCS/data/output/{time()}'
+os.makedirs(NOCS_SAVE_PATH)
+save_nocs_and_loss = SaveCachedNocsAndLoss(NOCS_SAVE_PATH)
+
+
 device='cuda:0'
 PATH = pl.Path(f'/home/baldeeb/Code/pytorch-NOCS/checkpoints/{time()}')
 os.makedirs(PATH)
 # Initialize Model
 ########################################################################
 if True:
-    model = get_nocs_resnet50_fpn(maskrcnn_weights=MaskRCNN_ResNet50_FPN_Weights.DEFAULT)
+    model = get_nocs_resnet50_fpn(maskrcnn_weights=MaskRCNN_ResNet50_FPN_Weights.DEFAULT,
+                                  cache_results=True)
     model.to(device).train()
 else:
     # NOTE: this is temporary test to make sure MaskRCNN works
@@ -40,7 +68,8 @@ else:
 ########################################################################
 
 habitatdata = HabitatDataloader("/home/baldeeb/Code/pytorch-NOCS/data/habitat-generated/00847-bCPU9suPUw9/metadata.json")
-dataloader = DataLoader(habitatdata, batch_size=2, shuffle=True, collate_fn=collate_fn)
+# habitatdata = HabitatDataloader("/home/baldeeb/Code/pytorch-NOCS/data/habitat-generated/200of100scenes_26selectChairs")
+dataloader = DataLoader(habitatdata, batch_size=8, shuffle=True, collate_fn=collate_fn)
 
 def targets2device(targets, device):
     for i in range(len(targets)): 
@@ -48,10 +77,10 @@ def targets2device(targets, device):
             targets[i][k] = targets[i][k].to(device)
     return targets
 
-wandb.init(project="torch-nocs", name="adding_cls")
+wandb.init(project="torch-nocs", name="caching-implemented")
 optim = Adam(model.parameters(), lr=1e-4)
 
-for epoch in tqdm(range(100)):
+for epoch in tqdm(range(20)):
     for itr, (images, targets) in enumerate(dataloader):
         images = images.to(device)
         targets = targets2device(targets, device)
@@ -75,6 +104,13 @@ for epoch in tqdm(range(100)):
                     })
                 model.train()
 
+        save_nocs_and_loss(epoch, model.cache)
+        if itr % 10 == 0:
+            if model.cache:
+                _printable = lambda a: a.permute(1,2,0).detach().cpu().numpy()
+                wandb.log({'cached': wandb.Image(_printable(model.cache[0]['nocs'][0]))})
+
     torch.save(model.state_dict(), PATH/f'{epoch}.pth')
     wandb.log({'epoch': epoch})
 
+save_nocs_and_loss.save_losses()
