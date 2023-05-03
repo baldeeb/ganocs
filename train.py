@@ -47,8 +47,8 @@ save_nocs_and_loss = SaveCachedNocsAndLoss(NOCS_SAVE_PATH)
 
 
 device='cuda:0'
-PATH = pl.Path(f'/home/baldeeb/Code/pytorch-NOCS/checkpoints/{time()}')
-os.makedirs(PATH)
+CHKPT_PATH = pl.Path(f'/home/baldeeb/Code/pytorch-NOCS/checkpoints/nocs/{time()}')
+os.makedirs(CHKPT_PATH)
 # Initialize Model
 ########################################################################
 if True:
@@ -67,8 +67,8 @@ else:
     model.train()
 ########################################################################
 
-habitatdata = HabitatDataloader("/home/baldeeb/Code/pytorch-NOCS/data/habitat-generated/00847-bCPU9suPUw9/metadata.json")
-# habitatdata = HabitatDataloader("/home/baldeeb/Code/pytorch-NOCS/data/habitat-generated/200of100scenes_26selectChairs")
+# habitatdata = HabitatDataloader("/home/baldeeb/Code/pytorch-NOCS/data/habitat-generated/00847-bCPU9suPUw9/metadata.json")
+habitatdata = HabitatDataloader("/home/baldeeb/Code/pytorch-NOCS/data/habitat-generated/200of100scenes_26selectChairs")
 dataloader = DataLoader(habitatdata, batch_size=8, shuffle=True, collate_fn=collate_fn)
 
 def targets2device(targets, device):
@@ -80,7 +80,7 @@ def targets2device(targets, device):
 wandb.init(project="torch-nocs", name="caching-implemented")
 optim = Adam(model.parameters(), lr=1e-4)
 
-for epoch in tqdm(range(20)):
+for epoch in tqdm(range(15)):
     for itr, (images, targets) in enumerate(dataloader):
         images = images.to(device)
         targets = targets2device(targets, device)
@@ -110,7 +110,7 @@ for epoch in tqdm(range(20)):
                 _printable = lambda a: a.permute(1,2,0).detach().cpu().numpy()
                 wandb.log({'cached': wandb.Image(_printable(model.cache[0]['nocs'][0]))})
 
-    torch.save(model.state_dict(), PATH/f'{epoch}.pth')
+    torch.save(model.state_dict(), CHKPT_PATH/f'{epoch}.pth')
     wandb.log({'epoch': epoch})
 
 save_nocs_and_loss.save_losses()

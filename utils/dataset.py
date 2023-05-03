@@ -1,13 +1,8 @@
+import cv2 
 import torch 
 import numpy as np
-
-import numpy as np
-
-
-
-
-import cv2 
 import matplotlib.pyplot as plt 
+from torch import meshgrid, arange, stack, concatenate, Tensor
 
 # draw a single bounding box onto a numpy array image
 def draw_bounding_box(img, boxes):
@@ -21,8 +16,6 @@ def draw_bounding_box(img, boxes):
     plt.imsave('temp.png', img/img.flatten().max())
 
 
-
-from torch import meshgrid, arange, stack, concatenate, Tensor
 def mask2bbox(mask)->Tensor:
     '''
     Takes in a mask of shape [B, C, H, W] and returns a tensor of shape [B, C, 4] 
@@ -46,8 +39,6 @@ def mask2bbox(mask)->Tensor:
     return boxes
 
 
-
-
 def labels2masks(labels, background=0):
     '''Creates a mask for each label in labels'''
     masks = []
@@ -55,6 +46,7 @@ def labels2masks(labels, background=0):
         if label == background: continue
         masks.append(labels == label)
     return np.stack(masks, axis=0)
+
 
 # Load data    
 def collate_fn(batch):
