@@ -1,3 +1,5 @@
+from torch.utils.data import (DataLoader, 
+                              WeightedRandomSampler)
 import pathlib as pl
 import numpy as np
 import json
@@ -21,7 +23,6 @@ def stratify_values(values, num_bins=100):
     idxs = np.concatenate(binned_idxs)
     return idxs, idx_weights
 
-
 class NocsLossDataset():
     def __init__(self, directory):
         self._dir = pl.Path(directory)
@@ -44,3 +45,17 @@ class NocsLossDataset():
         img = cv2.imread(str(self._dir/file_dir), cv2.COLOR_BGR2RGB)
         img = img.transpose([2,0,1]).astype(np.float32) / 255.0
         return img, self._losses[self._idxs[i]]
+    
+    @staticmethod
+    def get_dataloader(data_dir, 
+                    batch_size=64, 
+                    sampling=None):
+        dataset = NocsLossDataset(data_dir)
+        if sampling == 'stratified':
+            weights = dataset.get_sample_weights()
+            sampler = WeightedRandomSampler(weights, 
+                                            len(weights))
+        else: sampler = None
+        return DataLoader(dataset, 
+                          sampler=sampler, 
+                          batch_size=batch_size)
