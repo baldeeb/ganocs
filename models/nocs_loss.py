@@ -1,9 +1,10 @@
 import torch 
-from torch.nn.functional import one_hot
-from torchvision.ops import boxes as box_ops, roi_align
-from torch.nn.functional import binary_cross_entropy_with_logits as bce_loss
-from torch.nn.functional import cross_entropy
+from torchvision.ops import boxes as _, roi_align
+from torch.nn.functional import (cross_entropy, 
+                                 binary_cross_entropy, 
+                                 sigmoid)
 from models.nocs_util import select_labels
+from models.discriminator import DiscriminatorWithOptimizer
 import cv2 
 import matplotlib.pyplot as plt 
 
@@ -20,9 +21,8 @@ def draw_bounding_box(img, boxes):
 
 def project_on_boxes(gt, boxes, matched_idxs, M):
     # type: (Tensor, Tensor, Tensor, int) -> Tensor
-    """
-    NOTE: Code borrowed from 
-    torchvision.models.detection.roi_heads.project_masks_on_boxes
+    """ Code borrowed from torchvision.models.detection.roi_heads.project_masks_on_boxes
+    
     TODO: update description
 
     Given segmentation masks and the bounding boxes corresponding
@@ -43,44 +43,88 @@ def project_on_boxes(gt, boxes, matched_idxs, M):
     gt = gt.unsqueeze(0).to(rois)
     return roi_align(gt, rois, (M, M), 1.0)
 
-def nocs_loss(gt_labels, gt_nocs, 
-              nocs_proposals, mask_proposals, 
-              matched_ids, reduction='mean'):
+def discriminator_as_loss(discriminator:DiscriminatorWithOptimizer, 
+                          proposals:torch.Tensor, 
+                          targets:torch.Tensor,
+                          reduction:str='mean'):
     '''
-    Takes in an instance segmentation mask along with
-    the ground truth and predicted nocs maps. 
+    Args:
+        proposals (Tensor): [B, 3, N, H, W] tensor of predicted nocs
+            where B is batch size, 3 is for x,y,z channels, N is the
+            number of bins, and H, W are the height and width of the
+            image.
+        targets (Tensor): [B, 3, H, W] tensor of indices indicating
+            which of the binary logits is the correct nocs value.'''
+    
+    # Get weighted average of proposal
+    N = proposals.shape[2]
+    bin_idxs = torch.arange(N).to(proposals)
+    bin_idxs = bin_idxs[None, None, :, None, None]
+    weighted_avg = (sigmoid(proposals) * bin_idxs).sum(dim=2) / N
 
+    # Train discriminator
+    discriminator.train_step(targets, weighted_avg)
+    
+    # Get nocs loss
+    l = discriminator(weighted_avg)
+    return binary_cross_entropy(l, torch.ones_like(l), reduction=reduction)
+
+    
+
+def nocs_loss(gt_labels, 
+              gt_nocs, 
+              nocs_proposals, 
+              proposed_box_regions, 
+              matched_ids, 
+              reduction='mean', 
+              loss_fx=cross_entropy):
+    '''
+    Calculates nocs loss. Supports cross_entropy and discriminator loss.
     Args: 
+         gt_labels (List[long]): the labels existant in each image 
+            in the batch. The length of this list is the batch size.
+        gt_nocs [B, 3, H, W] (float): ground truth nocs with
+            values in [0, 1]
         nocs_proposals Dict[str, Tensor]: A dictionary of
                 tensors containing the predicted nocs maps:
                 - x [B, C, N, H, W] (float): x coordinate
                 - y [B, C, N, H, W] (float): y coordinate
                 - z [B, C, N, H, W] (float): z coordinate
             Where C is the number of classes and N is bins.
-        gt_nocs [3, H, W] (float): ground truth nocs with
-                values in [0, 1]
-        reduction (str): pytorch's cross entropy reduction.
+        proposed_box_regions List[Tensor]: Where each element of the list
+            is a tensor of shape [N, 4] containing the bounding box of the
+            region of interest in an image.
+        matched_idxs (List[Tensor]): A [B, N] set of indices indicating the
+            matching ground truth of each proposal.
+        reduction (str): 'none', 'mean' or other pytorch's cross entropy 
+            reductions.
+    Returns 
+        loss (Tensor): An element or list of values depending on the reduction
     
-    returns [N]: A dictionary of lists containing loss values
-    
-    TODO: implement symmetry loss
-    TODO: Experiment with
-        - uing interpolation + relu as in relu grids and using an l2 loss
+    NOTE: Symmetry loss is not implemented
     '''
+
+    # Select the label for each proposal
     labels = [gt_label[idxs] for gt_label, idxs 
               in zip(gt_labels, matched_ids)]
-    nocs_proposals = select_labels(nocs_proposals, labels)
-    proposals = torch.stack(tuple(nocs_proposals.values()), dim=1)
-    nocs_targets = [
-        project_on_boxes(m, p, i, proposals.shape[-1]) 
-        for m, p, i in zip(gt_nocs, mask_proposals, matched_ids)
-    ]
-    nocs_targets = torch.cat(nocs_targets, dim=0)
-    nocs_targets = (nocs_targets * proposals.shape[2]).round().long()  # To indices
-        
-    if nocs_targets.numel() == 0: return proposals.sum() * 0
+    proposals = select_labels(nocs_proposals, labels)  # Dict (3 values) [B, N, H, W] 
+    proposals = torch.stack(tuple(proposals.values()), dim=1) # [B, 3, N, H, W] 
     
-    return cross_entropy(proposals.transpose(1,2), 
-                         nocs_targets,
-                         reduction=reduction)
+    # Reshape to fit box by performing roi_align
+    W = proposals.shape[-1]  # Width of proposal we want gt to match
+    targets = [project_on_boxes(m, p, i, W) 
+        for m, p, i in zip(gt_nocs, proposed_box_regions, matched_ids)]
+    targets = torch.cat(targets, dim=0) # [B, 3, H, W]
+
+    # If target is empty return 0
+    if targets.numel() == 0: return proposals.sum() * 0
+
+    if loss_fx == cross_entropy:
+        targets = (targets * proposals.shape[2]).round().long()  # To indices
+        return cross_entropy(proposals.transpose(1,2), 
+                             targets,
+                             reduction=reduction)
+    elif isinstance(loss_fx, DiscriminatorWithOptimizer):
+        return discriminator_as_loss(loss_fx, proposals, targets,
+                                     reduction=reduction)
 

@@ -77,8 +77,8 @@ def targets2device(targets, device):
             targets[i][k] = targets[i][k].to(device)
     return targets
 
-wandb.init(project="torch-nocs", name="caching-implemented")
-optim = Adam(model.parameters(), lr=1e-4)
+wandb.init(project="torch-nocs", name="GAN_training")
+optim = Adam(model.parameters(), lr=1e-4, betas=(0.5, 0.999))
 
 for epoch in tqdm(range(15)):
     for itr, (images, targets) in enumerate(dataloader):

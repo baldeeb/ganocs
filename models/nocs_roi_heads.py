@@ -15,6 +15,7 @@ from torchvision.models.detection.mask_rcnn import (
     )
 from models.nocs_loss import nocs_loss
 from models.nocs_util import select_labels
+from models.discriminator import DiscriminatorWithOptimizer
 
 class RoIHeadsWithNocs(RoIHeads):
     def __init__(
@@ -73,28 +74,47 @@ class RoIHeadsWithNocs(RoIHeads):
                                             num_bins*num_classes)
                         ) 
             })
+        
+        self._discriminator_loss = {}
+        self._temp_discriminator = DiscriminatorWithOptimizer(3,
+                                        logger=self._temp_descriminator_logger)
+    def _temp_descriminator_logger(self, x): 
+        '''Temporary function for testing the discriminator.'''
+        self._discriminator_loss = x
 
     def has_nocs(self): 
         return self.nocs_heads is not None
 
 
-    def _reallocate_allocate(self, x):
+    def _properly_allocate(self, x):
         '''This function is to be called on results when not training or
         when training and caching.'''
         if not self.training:
             return x
         elif self.cache_results: 
             if isinstance(x, dict):
-                return {k:self._reallocate_allocate(v)
+                return {k:self._properly_allocate(v)
                         for k,v in x.items()}
             if isinstance(x, list): 
-                return [self._reallocate_allocate(xi)
+                return [self._properly_allocate(xi)
                         for xi in x]
             else: return x.clone().detach().cpu()
         else:
             raise RuntimeError('Missuse of function.')
 
 
+    def _check_target_contents(self, targets):
+        for t in targets:
+            # TODO: https://github.com/pytorch/pytorch/issues/26731
+            floating_point_types = (torch.float, torch.double, torch.half)
+            if not t["boxes"].dtype in floating_point_types:
+                raise TypeError(f"target boxes must of float type, instead got {t['boxes'].dtype}")
+            if not t["labels"].dtype == torch.int64:
+                raise TypeError(f"target labels must of int64 type, instead got {t['labels'].dtype}")
+            if self.has_keypoint():
+                if not t["keypoints"].dtype == torch.float32:
+                    raise TypeError(f"target keypoints must of float type, instead got {t['keypoints'].dtype}")
+                    
     def forward(
             self,
             features     : Dict[str, Tensor],
@@ -105,22 +125,12 @@ class RoIHeadsWithNocs(RoIHeads):
         # type: (...) -> Tuple[List[Dict[str, Tensor]], Dict[str, Tensor]]
         """
         Args:
-            features (List[Tensor])
-            proposals (List[Tensor[N, 4]])
-            image_shapes (List[Tuple[H, W]])
-            targets (List[Dict])
+            features (List[Tensor]): features produced by the backbone 
+            proposals (List[Tensor[N, 4]]): list of boxes regions.
+            image_shapes (List[Tuple[H, W]]): the sizes of each image in the batch.
+            targets (List[Dict]): 
         """
-        if targets is not None:
-            for t in targets:
-                # TODO: https://github.com/pytorch/pytorch/issues/26731
-                floating_point_types = (torch.float, torch.double, torch.half)
-                if not t["boxes"].dtype in floating_point_types:
-                    raise TypeError(f"target boxes must of float type, instead got {t['boxes'].dtype}")
-                if not t["labels"].dtype == torch.int64:
-                    raise TypeError(f"target labels must of int64 type, instead got {t['labels'].dtype}")
-                if self.has_keypoint():
-                    if not t["keypoints"].dtype == torch.float32:
-                        raise TypeError(f"target keypoints must of float type, instead got {t['keypoints'].dtype}")
+        if targets is not None: self._check_target_contents(targets)
 
         if self.training:
             proposals, matched_idxs, labels, regression_targets = self.select_training_samples(proposals, targets)
@@ -136,11 +146,10 @@ class RoIHeadsWithNocs(RoIHeads):
         result: List[Dict[str, torch.Tensor]] = []
         losses = {}
         if self.training:
-            if labels is None:
-                raise ValueError("labels cannot be None")
-            if regression_targets is None:
-                raise ValueError("regression_targets cannot be None")
-            loss_classifier, loss_box_reg = fastrcnn_loss(class_logits, box_regression, labels, regression_targets)
+            if labels is None: raise ValueError("labels cannot be None")
+            if regression_targets is None: raise ValueError("regression_targets cannot be None")
+            loss_classifier, loss_box_reg = fastrcnn_loss(class_logits, box_regression, 
+                                                          labels, regression_targets)
             losses = {"loss_classifier": loss_classifier, "loss_box_reg": loss_box_reg}
         if not self.training or self.cache_results:
             boxes, scores, labels = self.postprocess_detections(class_logits, box_regression, proposals, image_shapes)
@@ -148,35 +157,35 @@ class RoIHeadsWithNocs(RoIHeads):
             for i in range(num_images):
                 result.append(
                     {
-                        "boxes":  self._reallocate_allocate(boxes[i]),
-                        "labels": self._reallocate_allocate(labels[i]),
-                        "scores": self._reallocate_allocate(scores[i]),
+                        "boxes":  self._properly_allocate(boxes[i]),
+                        "labels": self._properly_allocate(labels[i]),
+                        "scores": self._properly_allocate(scores[i]),
                     }
                 )
 
         if self.has_mask():
-            mask_proposals = [p["boxes"] for p in result]
             if self.training:
                 if matched_idxs is None:
                     raise ValueError("if in training, matched_idxs should not be None")
 
                 # during training, only focus on positive boxes
                 num_images = len(proposals)
-                mask_proposals = []
+                proposed_box_regions = []
                 pos_matched_idxs = []
                 for img_id in range(num_images):
                     pos = torch.where(labels[img_id] > 0)[0]
-                    mask_proposals.append(proposals[img_id][pos])
+                    proposed_box_regions.append(proposals[img_id][pos])
                     pos_matched_idxs.append(matched_idxs[img_id][pos])
 
                 if self.cache_results:
-                    v = self._reallocate_allocate(pos_matched_idxs)
+                    v = self._properly_allocate(pos_matched_idxs)
                     for i, vi in enumerate(v): result[i]['pos_matched_idxs'] = vi
             else:
+                proposed_box_regions = [p["boxes"] for p in result]
                 pos_matched_idxs = None
 
             if self.mask_roi_pool is not None:
-                mask_features = self.mask_roi_pool(features, mask_proposals, image_shapes)
+                mask_features = self.mask_roi_pool(features, proposed_box_regions, image_shapes)
 
                 if self.has_nocs():
                     nocs_proposals = self._nocs_features(mask_features)
@@ -193,7 +202,8 @@ class RoIHeadsWithNocs(RoIHeads):
 
                 gt_masks = [t["masks"] for t in targets]
                 gt_labels = [t["labels"] for t in targets]
-                rcnn_loss_mask = maskrcnn_loss(mask_logits, mask_proposals, gt_masks, gt_labels, pos_matched_idxs)
+                rcnn_loss_mask = maskrcnn_loss(mask_logits, proposed_box_regions, 
+                                               gt_masks, gt_labels, pos_matched_idxs)
                 loss_mask = {"loss_mask": rcnn_loss_mask}
 
                 # Add NOCS to Loss
@@ -202,20 +212,21 @@ class RoIHeadsWithNocs(RoIHeads):
 
                     reduction = 'none' if self.cache_results else 'mean'
                     loss_mask["loss_nocs"] = nocs_loss(gt_labels, gt_nocs, 
-                                                       nocs_proposals, mask_proposals,
+                                                       nocs_proposals, 
+                                                       proposed_box_regions,
                                                        pos_matched_idxs,
-                                                       reduction=reduction)
+                                                       reduction=reduction,
+                                                       loss_fx=self._temp_discriminator)
                     if self.cache_results:
                         split_loss = self._separate_image_results(loss_mask['loss_nocs'], labels)
                         split_nocs = self._separate_image_results(nocs_proposals, labels)
                         for i in range(len(result)):
-                            result[i]['nocs'] = {k:self._reallocate_allocate(v[i]) 
+                            result[i]['nocs'] = {k:self._properly_allocate(v[i]) 
                                                  for k, v in split_nocs.items()}
                             obj_loss = split_loss[i].mean((1,2,3))
-                            result[i]['loss_nocs'] = self._reallocate_allocate(obj_loss)
+                            result[i]['loss_nocs'] = self._properly_allocate(obj_loss)
 
                         loss_mask["loss_nocs"] = torch.mean(loss_mask["loss_nocs"])
-                        
 
             else:
                 labels = [r["labels"] for r in result]
@@ -230,6 +241,9 @@ class RoIHeadsWithNocs(RoIHeads):
                         r['nocs'] = n
 
             losses.update(loss_mask)
+
+            # TODO: remove. This is temporary
+            losses.update(self._discriminator_loss)
 
         # keep none checks in if conditional so torchscript will conditionally
         # compile each branch
@@ -298,7 +312,6 @@ class RoIHeadsWithNocs(RoIHeads):
 
 
     def _nocs_map(self, nocs_proposals, labels):
-
         # Select the predicted labels
         for i, l in enumerate(labels):
             labels[i][l>self._num_cls] = 0
@@ -311,7 +324,7 @@ class RoIHeadsWithNocs(RoIHeads):
                 for i in range(len(labels))]
 
     def _nocs_features(self, mask_features):
-        """
+        ''' Returns nocs features given mask features.
         Args:
             mask_features (torch.Tensor) of shape [B, C, H, W]
                 representing the region of interest.
@@ -320,7 +333,7 @@ class RoIHeadsWithNocs(RoIHeads):
                 of the dict has shape [B, C, N, H, W], where C is
                 the number of classes predicted and N is the number
                 of bins used for this binary nocs predictor. 
-        """
+        '''
         B = mask_features.size(0)
         nocs_results: Dict[str, torch.Tensor] = {}
         for key, layers in self.nocs_heads.items():
@@ -340,33 +353,13 @@ class RoIHeadsWithNocs(RoIHeads):
         nocs_ch_in = heads.mask_head[0][0].in_channels
         num_classes = heads.mask_predictor.mask_fcn_logits.out_channels
         return RoIHeadsWithNocs(
-            heads.box_roi_pool, 
-            heads.box_head,
-            heads.box_predictor,
-
-            heads.proposal_matcher.high_threshold,
-            heads.proposal_matcher.low_threshold,
-
-            heads.fg_bg_sampler.batch_size_per_image,
-            heads.fg_bg_sampler.positive_fraction,
-            
+            heads.box_roi_pool, heads.box_head, heads.box_predictor,
+            heads.proposal_matcher.high_threshold, heads.proposal_matcher.low_threshold,
+            heads.fg_bg_sampler.batch_size_per_image, heads.fg_bg_sampler.positive_fraction,
             heads.box_coder.weights, 
-
-            heads.score_thresh,
-            heads.nms_thresh, 
-            heads.detections_per_img,
-
-            heads.mask_roi_pool, 
-            heads.mask_head,
-            heads.mask_predictor, 
-
-            heads.keypoint_roi_pool,
-            heads.keypoint_head,
-            heads.keypoint_predictor,
-
-            in_channels=nocs_ch_in,
-            num_bins=nocs_num_bins,
-            num_classes=num_classes,
-
+            heads.score_thresh, heads.nms_thresh, heads.detections_per_img,
+            heads.mask_roi_pool, heads.mask_head, heads.mask_predictor, 
+            heads.keypoint_roi_pool, heads.keypoint_head, heads.keypoint_predictor,
+            in_channels=nocs_ch_in, num_bins=nocs_num_bins, num_classes=num_classes,
             **kwargs
         )
