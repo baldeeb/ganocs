@@ -3,7 +3,7 @@ from typing import Optional, Callable, Dict
 from torch import nn
 import torch 
 
-class NocsDetectionHead(nn.Module):
+class NocsHeads(nn.Module):
     '''Derived from torchvision.models.detection.mask_rcnn.(MaskRCNNHeads, MaskRCNNPredictor)'''
     def __init__(self, 
                  in_channels, 
@@ -24,6 +24,7 @@ class NocsDetectionHead(nn.Module):
             )
             for k in keys
         })
+        self._normal_init(self.modules())
 
     def __getitem__(self, key):
         return self.parts[key]
@@ -44,15 +45,11 @@ class NocsDetectionHead(nn.Module):
             next_feature = layer_features
         return nn.Sequential(*blocks)
     
-    def _predictor(self, in_ch, feat_ch, num_classes):
+    def _predictor(self, in_ch, feat_ch, out_ch):
         blocks = [
-            nn.ConvTranspose2d(in_ch, feat_ch,
-                kernel_size=2, stride=1, padding=0,
-            ),
+            nn.ConvTranspose2d(in_ch, feat_ch, 2, 2, 0),
             nn.ReLU(inplace=True),
-            nn.Conv2d( feat_ch, num_classes,
-                kernel_size=1, stride=1, padding=0,
-            )    
+            nn.Conv2d(feat_ch, out_ch, 1, 1, 0),
         ]
         return nn.Sequential(*blocks)
 
@@ -61,14 +58,14 @@ class NocsDetectionHead(nn.Module):
             if isinstance(m, nn.Conv2d):
                 nn.init.kaiming_normal_(m.weight, mode="fan_out", nonlinearity="relu")
                 if m.bias is not None: 
-                    nn.init.zero_(m.bias)
+                    nn.init.zeros_(m.bias)
 
     def _normal_init(self, modules):
         for m in modules:
             if isinstance(m, nn.Conv2d):
                 nn.init.normal_(m.weight, std=0.02)
                 if m.bias is not None: 
-                    nn.init.zero_(m.bias)
+                    nn.init.zeros_(m.bias)
 
     def forward(self, x):
         ''' Returns nocs features given mask features.
@@ -81,10 +78,11 @@ class NocsDetectionHead(nn.Module):
                 the number of classes predicted and N is the number
                 of bins used for this binary nocs predictor. 
         '''
-        B, _, H, W = x.shape
+        B = x.shape[0]
         results: Dict[str, torch.Tensor] = {}
         for k in self.keys:
             kv = self.parts[k](x)
             results[k] = kv.reshape(B, self.num_classes, 
-                                    self.num_bins, H, W)
+                                    self.num_bins, 
+                                    *kv.shape[-2:])
         return results

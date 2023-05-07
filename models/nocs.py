@@ -105,17 +105,20 @@ class NOCS(MaskRCNN):
         if image_mean is None: image_mean = [0.485, 0.456, 0.406]
         if image_std is None: image_std = [0.229, 0.224, 0.225]
         self._min_size, self._max_size = min_size, max_size
-        self.transform = GeneralizedRCNNTransformWithNocs(min_size=min_size, 
-                                                          max_size=max_size, 
-                                                          image_mean=image_mean, 
-                                                          image_std=image_std, 
-                                                          **kwargs)
+        self.transform = GeneralizedRCNNTransformWithNocs(
+                                            min_size=min_size, 
+                                            max_size=max_size, 
+                                            image_mean=image_mean, 
+                                            image_std=image_std, 
+                                            **kwargs)
     
     def _updated_sizes(self, s):
-        if isinstance(s, list): return [self._updated_sizes(si) for si in s]
+        if isinstance(s, list): 
+            return [self._updated_sizes(si) for si in s]
         min_size = torch.min(s).to(dtype=torch.float32)
         max_size = torch.max(s).to(dtype=torch.float32)
-        scale = torch.min(self._min_size / min_size, self._max_size / max_size)
+        scale = torch.min(self._min_size / min_size, 
+                          self._max_size / max_size)
         return (s * scale).long()
         
     def forward(self, images, targets=None):

@@ -77,7 +77,8 @@ def nocs_loss(gt_labels,
               nocs_proposals, 
               proposed_box_regions, 
               matched_ids, 
-              reduction='mean', 
+              reduction='mean',
+              loss_type='cross_entropy', 
               loss_fx=cross_entropy):
     '''
     Calculates nocs loss. Supports cross_entropy and discriminator loss.

@@ -9,12 +9,9 @@ from torchvision.models.detection.roi_heads import (
     maskrcnn_inference,
     keypointrcnn_loss, keypointrcnn_inference,
     )
-from torchvision.models.detection.mask_rcnn import (
-    MaskRCNNHeads,
-    MaskRCNNPredictor
-    )
 from models.nocs_loss import nocs_loss
-from models.nocs_util import select_labels
+from models.nocs_util import select_nocs_proposals, separate_image_results
+from models.nocs_heads import NocsHeads
 
 class RoIHeadsWithNocs(RoIHeads):
     def __init__(
@@ -33,17 +30,15 @@ class RoIHeadsWithNocs(RoIHeads):
         nms_thresh,
         detections_per_img,
         # Mask
-        mask_roi_pool=None,
-        mask_head=None,
-        mask_predictor=None,
-        keypoint_roi_pool=None,
-        keypoint_head=None,
-        keypoint_predictor=None,
+        mask_roi_pool=None, mask_head=None, mask_predictor=None, 
+        # Keypoint
+        keypoint_roi_pool=None, keypoint_head=None, keypoint_predictor=None,
         # NOCS
-        in_channels=256,
-        num_bins=32,
-        num_classes=91, 
-        cache_results=False,  # retains results at training
+        in_channels:int     = 256, 
+        num_bins:int        = 32, 
+        num_classes:int     = 91, 
+        nocs_layers:List[int] = (256, 256, 256, 256, 256),
+        cache_results:bool  = False,  # retains results at training
         nocs_loss=torch.nn.functional.cross_entropy,  # can be cross entropy or discriminator
     ):
         super().__init__(
@@ -55,30 +50,19 @@ class RoIHeadsWithNocs(RoIHeads):
             score_thresh, nms_thresh, detections_per_img,
             # Mask
             mask_roi_pool, mask_head, mask_predictor,
+            # Keypoint
             keypoint_roi_pool, keypoint_head, keypoint_predictor,
         )
 
         self.cache_results, self.cache = cache_results, None
-        layers = (256, 256, 256, 256, 256)
-        self._num_cls, self._num_bins = num_classes, num_bins
-        # TODO: pass in as param
-        # TODO: Substitute this by nocs_head.py's NocsHead class.
-        self.nocs_heads = nn.ModuleDict()
-        for k in ['x', 'y', 'z']:
-            self.nocs_heads[k] = nn.ModuleDict({
-                'head': MaskRCNNHeads(in_channels, 
-                                      layers[:-1], 
-                                      dilation=1),
-                'pred': nn.Sequential(
-                            MaskRCNNPredictor(layers[-2], 
-                                            layers[-1], 
-                                            num_bins*num_classes)
-                        ) 
-            })
-        
+        self.nocs_heads = NocsHeads(in_channels, nocs_layers,
+                                    num_classes, num_bins,
+                                    keys=['x', 'y', 'z'],)
+        self.ignore_nocs = False
         self.nocs_loss = nocs_loss
 
     def has_nocs(self): 
+        if self.ignore_nocs: return False
         return self.nocs_heads is not None
 
     def _properly_allocate(self, x):
@@ -88,11 +72,9 @@ class RoIHeadsWithNocs(RoIHeads):
             return x
         elif self.cache_results: 
             if isinstance(x, dict):
-                return {k:self._properly_allocate(v)
-                        for k,v in x.items()}
+                return {k:self._properly_allocate(v) for k,v in x.items()}
             if isinstance(x, list): 
-                return [self._properly_allocate(xi)
-                        for xi in x]
+                return [self._properly_allocate(xi) for xi in x]
             else: return x.clone().detach().cpu()
         else:
             raise RuntimeError('Missuse of function.')
@@ -183,7 +165,7 @@ class RoIHeadsWithNocs(RoIHeads):
                 mask_features = self.mask_roi_pool(features, proposed_box_regions, image_shapes)
 
                 if self.has_nocs():
-                    nocs_proposals = self._nocs_features(mask_features)
+                    nocs_proposals = self.nocs_heads(mask_features)
 
                 mask_features = self.mask_head(mask_features)
                 mask_logits = self.mask_predictor(mask_features)
@@ -211,11 +193,10 @@ class RoIHeadsWithNocs(RoIHeads):
                                                        proposed_box_regions,
                                                        pos_matched_idxs,
                                                        reduction=reduction,
-                                                       loss_fx=self.nocs_loss
-                                                       )
+                                                       loss_fx=self.nocs_loss)
                     if self.cache_results:
-                        split_loss = self._separate_image_results(loss_mask['loss_nocs'], labels)
-                        split_nocs = self._separate_image_results(nocs_proposals, labels)
+                        split_loss = separate_image_results(loss_mask['loss_nocs'], labels)
+                        split_nocs = separate_image_results(nocs_proposals, labels)
                         for i in range(len(result)):
                             result[i]['nocs'] = {k:self._properly_allocate(v[i]) 
                                                  for k, v in split_nocs.items()}
@@ -232,109 +213,67 @@ class RoIHeadsWithNocs(RoIHeads):
                 
                 # Add NOCS to results
                 if self.has_nocs():
-                    nocs_maps = self._nocs_map(nocs_proposals, labels)
-                    for n, r in zip(nocs_maps, result):
-                        r['nocs'] = n
+                    nocs_maps = select_nocs_proposals(nocs_proposals, 
+                                                      labels, 
+                                                      self.nocs_heads.num_classes)
+                    for n, r in zip(nocs_maps, result): r['nocs'] = n
 
             losses.update(loss_mask)
 
         # keep none checks in if conditional so torchscript will conditionally
         # compile each branch
-        if (
-            self.keypoint_roi_pool is not None
+        if (self.keypoint_roi_pool is not None
             and self.keypoint_head is not None
-            and self.keypoint_predictor is not None
-        ):
-            keypoint_proposals = [p["boxes"] for p in result]
-            if self.training:
-                # during training, only focus on positive boxes
-                num_images = len(proposals)
-                keypoint_proposals = []
-                pos_matched_idxs = []
-                if matched_idxs is None:
-                    raise ValueError("if in trainning, matched_idxs should not be None")
-
-                for img_id in range(num_images):
-                    pos = torch.where(labels[img_id] > 0)[0]
-                    keypoint_proposals.append(proposals[img_id][pos])
-                    pos_matched_idxs.append(matched_idxs[img_id][pos])
-            else:
-                pos_matched_idxs = None
-
-            keypoint_features = self.keypoint_roi_pool(features, keypoint_proposals, image_shapes)
-            keypoint_features = self.keypoint_head(keypoint_features)
-            keypoint_logits = self.keypoint_predictor(keypoint_features)
-
-            loss_keypoint = {}
-            if self.training:
-                if targets is None or pos_matched_idxs is None:
-                    raise ValueError("both targets and pos_matched_idxs should not be None when in training mode")
-
-                gt_keypoints = [t["keypoints"] for t in targets]
-                rcnn_loss_keypoint = keypointrcnn_loss(
-                    keypoint_logits, keypoint_proposals, gt_keypoints, pos_matched_idxs
-                )
-                loss_keypoint = {"loss_keypoint": rcnn_loss_keypoint}
-            else:
-                if keypoint_logits is None or keypoint_proposals is None:
-                    raise ValueError(
-                        "both keypoint_logits and keypoint_proposals should not be None when not in training mode"
-                    )
-
-                keypoints_probs, kp_scores = keypointrcnn_inference(keypoint_logits, keypoint_proposals)
-                for keypoint_prob, kps, r in zip(keypoints_probs, kp_scores, result):
-                    r["keypoints"] = keypoint_prob
-                    r["keypoints_scores"] = kps
-            losses.update(loss_keypoint)
+            and self.keypoint_predictor is not None):
+            self._run_keypoint_head(result, targets, losses, proposals, matched_idxs, labels, features, image_shapes)
 
         if self.cache_results and self.training: self.cache = result
         return result, losses
     
 
-    def _separate_image_results(self, source, reference):
-        '''splits the first dimention of source based on 
-        the first 2 dimensions of the reference.'''
-        _per_img = [b.shape[0] for b in reference]
-        if isinstance(source, torch.Tensor):
-            return source.split(_per_img)
-        elif isinstance(source, dict):
-            for k, v in source.items(): 
-                source[k] = v.split(_per_img)
-            return source
+    def _run_keypoint_head(self, result, targets, losses, proposals, matched_idxs, labels, features, image_shapes):
+        keypoint_proposals = [p["boxes"] for p in result]
+        if self.training:
+            # during training, only focus on positive boxes
+            num_images = len(proposals)
+            keypoint_proposals = []
+            pos_matched_idxs = []
+            if matched_idxs is None:
+                raise ValueError("if in trainning, matched_idxs should not be None")
 
-    def _nocs_map(self, nocs_proposals, labels):
-        # Select the predicted labels
-        for i, l in enumerate(labels):
-            labels[i][l>self._num_cls] = 0
-        nocs_proposals = select_labels(nocs_proposals, 
-                                       labels)
-        # Split batch to batches
-        nocs_proposals = self._separate_image_results(nocs_proposals, 
-                                                      labels)
-        return [{k:v[i] for k,v in nocs_proposals.items()} 
-                for i in range(len(labels))]
+            for img_id in range(num_images):
+                pos = torch.where(labels[img_id] > 0)[0]
+                keypoint_proposals.append(proposals[img_id][pos])
+                pos_matched_idxs.append(matched_idxs[img_id][pos])
+        else:
+            pos_matched_idxs = None
 
-    def _nocs_features(self, features):
-        ''' Returns nocs features given mask features.
-        Args:
-            features (torch.Tensor) of shape [B, C, H, W]
-                representing the region of interest.
-        Returns:
-            nocs_results (Dict[str, torch.Tensor]): each element
-                of the dict has shape [B, C, N, H, W], where C is
-                the number of classes predicted and N is the number
-                of bins used for this binary nocs predictor. 
-        '''
-        B = features.size(0)
-        nocs_results: Dict[str, torch.Tensor] = {}
-        for key, layers in self.nocs_heads.items():
-            x = layers['head'](features)
-            x = layers['pred'](x)
-            nocs_results[key] = x.reshape(B, 
-                                    self._num_cls, 
-                                    self._num_bins,
-                                    *x.shape[-2:])
-        return nocs_results
+        keypoint_features = self.keypoint_roi_pool(features, keypoint_proposals, image_shapes)
+        keypoint_features = self.keypoint_head(keypoint_features)
+        keypoint_logits = self.keypoint_predictor(keypoint_features)
+
+        loss_keypoint = {}
+        if self.training:
+            if targets is None or pos_matched_idxs is None:
+                raise ValueError("both targets and pos_matched_idxs should not be None when in training mode")
+
+            gt_keypoints = [t["keypoints"] for t in targets]
+            rcnn_loss_keypoint = keypointrcnn_loss(
+                keypoint_logits, keypoint_proposals, gt_keypoints, pos_matched_idxs
+            )
+            loss_keypoint = {"loss_keypoint": rcnn_loss_keypoint}
+        else:
+            if keypoint_logits is None or keypoint_proposals is None:
+                raise ValueError(
+                    "both keypoint_logits and keypoint_proposals should not be None when not in training mode"
+                )
+
+            keypoints_probs, kp_scores = keypointrcnn_inference(keypoint_logits, keypoint_proposals)
+            for keypoint_prob, kps, r in zip(keypoints_probs, kp_scores, result):
+                r["keypoints"] = keypoint_prob
+                r["keypoints_scores"] = kps
+        losses.update(loss_keypoint)
+
 
     @staticmethod
     def from_torchvision_roiheads(heads:RoIHeads, 

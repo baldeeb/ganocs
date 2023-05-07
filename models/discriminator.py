@@ -32,7 +32,7 @@ class Discriminator(nn.Module):
 
         # a 4x4 kernel model. closer to DCGAN.
         # NOTE: currently collapses the generator.
-        if False:
+        if True:
             fcs = [in_ch, feat_ch, 2*feat_ch, 4*feat_ch, 8*feat_ch, 1]
             self.model = nn.Sequential(
                 nn.Conv2d(fcs[0], fcs[1], 4, 2, 1, bias=False),
@@ -46,7 +46,7 @@ class Discriminator(nn.Module):
                 nn.Conv2d(fcs[3], fcs[5], 3, 1, 0, bias=False),
                 nn.Sigmoid()
             )
-        if True:
+        if False:
             fcs = [in_ch, feat_ch, feat_ch, feat_ch, feat_ch, 1]
             self.model = nn.Sequential(
                 nn.Conv2d(fcs[0], fcs[1], 4, 2, 1, bias=False),
@@ -91,20 +91,18 @@ class DiscriminatorWithOptimizer(Discriminator):
                  in_ch, 
                  feat_ch=64,
                  optimizer=torch.optim.Adam,
-                 optim_args={'lr':2e-4, 
+                 optim_args={'lr':1e-4, 
                              'betas':(0.5, 0.999)},
                  logger=None
                 ):
         super().__init__(in_ch, feat_ch)
         self.optim = optimizer(self.parameters(), 
                                **optim_args)
-        self.freeze = False
         if logger is None:
             self.log = {}
             self.logger = lambda x: self.log.update(x)
     
     def train_step(self, real, fake):
-        if self.freeze: return 0
         self.optim.zero_grad()
         loss = self._loss(real, fake)
         loss.backward(retain_graph=True)
