@@ -15,7 +15,6 @@ from torchvision.models.detection.mask_rcnn import (
     )
 from models.nocs_loss import nocs_loss
 from models.nocs_util import select_labels
-from models.discriminator import DiscriminatorWithOptimizer
 
 class RoIHeadsWithNocs(RoIHeads):
     def __init__(
@@ -44,7 +43,8 @@ class RoIHeadsWithNocs(RoIHeads):
         in_channels=256,
         num_bins=32,
         num_classes=91, 
-        cache_results=False  # retains results at training
+        cache_results=False,  # retains results at training
+        nocs_loss=torch.nn.functional.cross_entropy,  # can be cross entropy or discriminator
     ):
         super().__init__(
             box_roi_pool, box_head, box_predictor,
@@ -62,6 +62,7 @@ class RoIHeadsWithNocs(RoIHeads):
         layers = (256, 256, 256, 256, 256)
         self._num_cls, self._num_bins = num_classes, num_bins
         # TODO: pass in as param
+        # TODO: Substitute this by nocs_head.py's NocsHead class.
         self.nocs_heads = nn.ModuleDict()
         for k in ['x', 'y', 'z']:
             self.nocs_heads[k] = nn.ModuleDict({
@@ -75,16 +76,10 @@ class RoIHeadsWithNocs(RoIHeads):
                         ) 
             })
         
-        self._discriminator_loss = {}
-        self._temp_discriminator = DiscriminatorWithOptimizer(3,
-                                        logger=self._temp_descriminator_logger)
-    def _temp_descriminator_logger(self, x): 
-        '''Temporary function for testing the discriminator.'''
-        self._discriminator_loss = x
+        self.nocs_loss = nocs_loss
 
     def has_nocs(self): 
         return self.nocs_heads is not None
-
 
     def _properly_allocate(self, x):
         '''This function is to be called on results when not training or
@@ -216,7 +211,8 @@ class RoIHeadsWithNocs(RoIHeads):
                                                        proposed_box_regions,
                                                        pos_matched_idxs,
                                                        reduction=reduction,
-                                                       loss_fx=self._temp_discriminator)
+                                                       loss_fx=self.nocs_loss
+                                                       )
                     if self.cache_results:
                         split_loss = self._separate_image_results(loss_mask['loss_nocs'], labels)
                         split_nocs = self._separate_image_results(nocs_proposals, labels)
@@ -241,9 +237,6 @@ class RoIHeadsWithNocs(RoIHeads):
                         r['nocs'] = n
 
             losses.update(loss_mask)
-
-            # TODO: remove. This is temporary
-            losses.update(self._discriminator_loss)
 
         # keep none checks in if conditional so torchscript will conditionally
         # compile each branch
@@ -309,8 +302,6 @@ class RoIHeadsWithNocs(RoIHeads):
                 source[k] = v.split(_per_img)
             return source
 
-
-
     def _nocs_map(self, nocs_proposals, labels):
         # Select the predicted labels
         for i, l in enumerate(labels):
@@ -323,10 +314,10 @@ class RoIHeadsWithNocs(RoIHeads):
         return [{k:v[i] for k,v in nocs_proposals.items()} 
                 for i in range(len(labels))]
 
-    def _nocs_features(self, mask_features):
+    def _nocs_features(self, features):
         ''' Returns nocs features given mask features.
         Args:
-            mask_features (torch.Tensor) of shape [B, C, H, W]
+            features (torch.Tensor) of shape [B, C, H, W]
                 representing the region of interest.
         Returns:
             nocs_results (Dict[str, torch.Tensor]): each element
@@ -334,10 +325,10 @@ class RoIHeadsWithNocs(RoIHeads):
                 the number of classes predicted and N is the number
                 of bins used for this binary nocs predictor. 
         '''
-        B = mask_features.size(0)
+        B = features.size(0)
         nocs_results: Dict[str, torch.Tensor] = {}
         for key, layers in self.nocs_heads.items():
-            x = layers['head'](mask_features)
+            x = layers['head'](features)
             x = layers['pred'](x)
             nocs_results[key] = x.reshape(B, 
                                     self._num_cls, 

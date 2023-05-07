@@ -28,3 +28,12 @@ The code contains some added features for experiments that were ran.
 - [ ] box fitting (Umeyama optimization)
     - The umeyama implementation from the original nocs work is copied into utils/aligning.py. 
     All that remains is using those to derive the box and pose metrics.s
+
+
+## References
+
+- **Pytorch example code:** pytorch has an example of DCGAN coded and explained 
+[here](https://pytorch.org/tutorials/beginner/dcgan_faces_tutorial.html)
+
+- **Diagnosing GAN training:** [This article](https://machinelearningmastery.com/practical-guide-to-gan-failure-modes/) 
+goes over different failure modes and discusses the reason they occure and how to mitigate them.

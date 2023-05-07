@@ -45,6 +45,8 @@ class NOCS(MaskRCNN):
         # NOCS parameters
         nocs_bins=32,
         cache_results=False,
+        nocs_loss=torch.nn.functional.cross_entropy,  # can be cross entropy or discriminator
+
         # Others
         **kwargs,
     ):
@@ -94,7 +96,9 @@ class NOCS(MaskRCNN):
         self.roi_heads = RoIHeadsWithNocs.from_torchvision_roiheads(
                                                     self.roi_heads,
                                                     nocs_num_bins=nocs_bins,
-                                                    cache_results = cache_results)
+                                                    cache_results = cache_results,
+                                                    nocs_loss=nocs_loss,)
+        
         self.cache = None
         
         # Update Transforms to include NOCS

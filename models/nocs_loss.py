@@ -2,7 +2,7 @@ import torch
 from torchvision.ops import boxes as _, roi_align
 from torch.nn.functional import (cross_entropy, 
                                  binary_cross_entropy, 
-                                 sigmoid)
+                                 softmax)
 from models.nocs_util import select_labels
 from models.discriminator import DiscriminatorWithOptimizer
 import cv2 
@@ -60,7 +60,8 @@ def discriminator_as_loss(discriminator:DiscriminatorWithOptimizer,
     N = proposals.shape[2]
     bin_idxs = torch.arange(N).to(proposals)
     bin_idxs = bin_idxs[None, None, :, None, None]
-    weighted_avg = (sigmoid(proposals) * bin_idxs).sum(dim=2) / N
+    soft_nocs = softmax(proposals, dim=2)
+    weighted_avg = (soft_nocs * bin_idxs).sum(dim=2) / N
 
     # Train discriminator
     discriminator.train_step(targets, weighted_avg)
@@ -85,12 +86,9 @@ def nocs_loss(gt_labels,
             in the batch. The length of this list is the batch size.
         gt_nocs [B, 3, H, W] (float): ground truth nocs with
             values in [0, 1]
-        nocs_proposals Dict[str, Tensor]: A dictionary of
-                tensors containing the predicted nocs maps:
-                - x [B, C, N, H, W] (float): x coordinate
-                - y [B, C, N, H, W] (float): y coordinate
-                - z [B, C, N, H, W] (float): z coordinate
-            Where C is the number of classes and N is bins.
+        nocs_proposals Dict[str, Tensor]: A dictionary of (x,y,z) of
+                tensors containing the predicted nocs maps [B, C, N, H, W]
+                Where C is the number of classes and N is bins.
         proposed_box_regions List[Tensor]: Where each element of the list
             is a tensor of shape [N, 4] containing the bounding box of the
             region of interest in an image.
