@@ -97,7 +97,8 @@ class GeneralizedRCNNTransformWithNocs(GeneralizedRCNNTransform):
             if "nocs" in pred:
                 num_bins =  pred["nocs"]["x"].shape[bin_index]
                 def process_nocs_dim(v):
-                    v = v.argmax(bin_index) / num_bins 
+                    if num_bins > 1:  # Assume that it is classification and not regression.
+                        v = v.argmax(bin_index) / num_bins 
                     v = paste_masks_in_image(v.unsqueeze(bin_index), 
                                              pred["boxes"], o_im_s)
                     return v

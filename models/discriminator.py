@@ -88,7 +88,7 @@ class DiscriminatorWithOptimizer(Discriminator):
     '''Discriminator model for NOCS images.
     ref: https://pytorch.org/tutorials/beginner/dcgan_faces_tutorial.html'''
     def __init__(self, 
-                 in_ch, 
+                 in_ch=3, 
                  feat_ch=64,
                  optimizer=torch.optim.Adam,
                  optim_args={'lr':1e-4, 
@@ -102,12 +102,30 @@ class DiscriminatorWithOptimizer(Discriminator):
             self.log = {}
             self.logger = lambda x: self.log.update(x)
     
-    def train_step(self, real, fake):
+    def _step(self, x, real:bool):
         self.optim.zero_grad()
-        loss = self._loss(real, fake)
-        loss.backward(retain_graph=True)
+        x =  self.forward(x.clone().detach()).reshape(-1, 1)
+        target = torch.ones_like(x) if real else torch.zeros_like(x)
+        loss = binary_cross_entropy(x, target)
+        loss.backward()
         self.optim.step()
-        return loss.item()
+        return loss.item(), x.clone().detach()
+
+    def update(self, real, fake):
+        # self.optim.zero_grad()
+        # loss = self._loss(real, fake)
+        # loss.backward(retain_graph=True)
+        # self.optim.step()
+        # return loss.item()
+        
+        real_loss, real_values = self._step(real, True)
+        fake_loss, fake_values = self._step(fake, False)
+
+        acc = self.accuracy(real_values, fake_values)
+        self.logger({'discriminator_real_loss': real_loss,
+                     'discriminator_fake_loss': fake_loss,
+                     'discriminator_accuracy': acc})
+        return real_loss + fake_loss
 
     def accuracy(self, real, fake):
         r = torch.sum(real > 0.5).item()

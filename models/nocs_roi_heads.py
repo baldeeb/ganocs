@@ -35,11 +35,15 @@ class RoIHeadsWithNocs(RoIHeads):
         keypoint_roi_pool=None, keypoint_head=None, keypoint_predictor=None,
         # NOCS
         in_channels:int     = 256, 
-        num_bins:int        = 32, 
+        num_bins:int        = 32,  # set to 1 for regression
         num_classes:int     = 91, 
         nocs_layers:List[int] = (256, 256, 256, 256, 256),
         cache_results:bool  = False,  # retains results at training
         nocs_loss=torch.nn.functional.cross_entropy,  # can be cross entropy or discriminator
+        nocs_loss_mode:str  = 'classification',  # regression, classification
+        multiheaded_nocs:bool = False,
+        # Others
+        **kwargs,
     ):
         super().__init__(
             box_roi_pool, box_head, box_predictor,
@@ -55,12 +59,16 @@ class RoIHeadsWithNocs(RoIHeads):
         )
 
         self.cache_results, self.cache = cache_results, None
+        self.nocs_loss_mode = nocs_loss_mode
+
         self.nocs_heads = NocsHeads(in_channels, nocs_layers,
                                     num_classes, num_bins,
-                                    keys=['x', 'y', 'z'],)
+                                    keys=['x', 'y', 'z'],
+                                    multiheaded=multiheaded_nocs,
+                                    mode=nocs_loss_mode)
         self.ignore_nocs = False
         self.nocs_loss = nocs_loss
-
+            
     def has_nocs(self): 
         if self.ignore_nocs: return False
         return self.nocs_heads is not None
@@ -92,13 +100,12 @@ class RoIHeadsWithNocs(RoIHeads):
                 if not t["keypoints"].dtype == torch.float32:
                     raise TypeError(f"target keypoints must of float type, instead got {t['keypoints'].dtype}")
                     
-    def forward(
-            self,
-            features     : Dict[str, Tensor],
-            proposals    : List[Tensor],
-            image_shapes : List[Tuple[int, int]],
-            targets      : Optional[List[Dict[str, Tensor]]] = None ,
-            ):
+    def forward(self,
+                features     : Dict[str, Tensor],
+                proposals    : List[Tensor],
+                image_shapes : List[Tuple[int, int]],
+                targets      : Optional[List[Dict[str, Tensor]]] = None,
+        ):
         # type: (...) -> Tuple[List[Dict[str, Tensor]], Dict[str, Tensor]]
         """
         Args:
@@ -193,7 +200,8 @@ class RoIHeadsWithNocs(RoIHeads):
                                                        proposed_box_regions,
                                                        pos_matched_idxs,
                                                        reduction=reduction,
-                                                       loss_fx=self.nocs_loss)
+                                                       loss_fx=self.nocs_loss,
+                                                       mode=self.nocs_loss_mode)
                     if self.cache_results:
                         split_loss = separate_image_results(loss_mask['loss_nocs'], labels)
                         split_nocs = separate_image_results(nocs_proposals, labels)
@@ -213,8 +221,7 @@ class RoIHeadsWithNocs(RoIHeads):
                 
                 # Add NOCS to results
                 if self.has_nocs():
-                    nocs_maps = select_nocs_proposals(nocs_proposals, 
-                                                      labels, 
+                    nocs_maps = select_nocs_proposals(nocs_proposals, labels, 
                                                       self.nocs_heads.num_classes)
                     for n, r in zip(nocs_maps, result): r['nocs'] = n
 

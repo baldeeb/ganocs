@@ -16,10 +16,13 @@ from time import time
 # DATA_DIR = "/home/baldeeb/Code/pytorch-NOCS/data/habitat-generated/00847-bCPU9suPUw9/metadata.json"
 DATA_DIR = "/home/baldeeb/Code/pytorch-NOCS/data/habitat-generated/200of100scenes_26selectChairs"  # larger dataset
 
-LOAD_MRCNN = None # '/home/baldeeb/Code/pytorch-NOCS/checkpoints/nocs/saved/mrcnn_2epoch.pth'
+# LOAD_MRCNN = '/home/baldeeb/Code/pytorch-NOCS/checkpoints/nocs/saved/disc_updates/mrcnn_1.pth'
+# LOAD_MRCNN = '/home/baldeeb/Code/pytorch-NOCS/checkpoints/nocs/saved/disc_updates/9.pth'
+# LOAD_MRCNN = '/home/baldeeb/Code/pytorch-NOCS/checkpoints/nocs/saved/conjoined_regression/mrcnn_0.pth'
+# LOAD_MRCNN = '/home/baldeeb/Code/pytorch-NOCS/checkpoints/nocs/saved/disjoint_regression/normal_1.pth'
+LOAD_MRCNN = None
 
-
-DEVICE='cuda:1'
+DEVICE='cuda:0'
 CHKPT_PATH = pl.Path(f'/home/baldeeb/Code/pytorch-NOCS/checkpoints/nocs/{time()}')
 os.makedirs(CHKPT_PATH)
 
@@ -70,42 +73,46 @@ def params_generator(model, ignore=None, select=None):
 
 # Initialize Model
 nocs_discriminator = DiscriminatorWithOptimizer(
-                            in_ch = 3,
-                            optim_args={'lr': 2e-4, 
-                                        'betas': (0.5, 0.999)},
-                        )
+                        optim_args={'lr': 3e-4,
+                                    'betas': (0.5, 0.999)},
+                    )
 model = get_nocs_resnet50_fpn(
                 maskrcnn_weights=MaskRCNN_ResNet50_FPN_Weights.DEFAULT,
-                nocs_loss=nocs_discriminator)
+                nocs_loss=nocs_discriminator,
+                nocs_num_bins=1,
+                nocs_loss_mode = 'regression',
+                multiheaded_nocs = False
+                )
 model.to(DEVICE).train()
 
 habitatdata = HabitatDataloader(DATA_DIR)
 dataloader = DataLoader(habitatdata, 
-                        batch_size=8, 
+                        batch_size=5, 
                         shuffle=True, 
                         collate_fn=collate_fn)
 
-wandb.init(project="torch-nocs", name="NOCSfull_GAN")
+wandb.init(project="torch-nocs", 
+           name="fullGanNocs_lr3en4_b5_singleHead")
 
 
 # For traditional nocs training.
 # make sure that loss is set to cross entropys.
-if False:
-    optimizer = Adam(model.parameters(), lr=1e-4, betas=(0.5, 0.999))
-    run_training(model, dataloader, optimizer, num_epochs=2, save_prefix='normal_')
+if True:
+    optimizer = Adam(model.parameters(), lr=3e-4, betas=(0.5, 0.999))
+    run_training(model, dataloader, optimizer, num_epochs=100, save_prefix='fullGanNocs_lr3en4_b5_singleHead_')
     exit(0)
 
-
-# Either load a mask rcnn or train one.
-if LOAD_MRCNN:
-    model.load_state_dict(torch.load(LOAD_MRCNN))
-    print(f'Loaded {LOAD_MRCNN}')
-else:
-    # Freeze nocs heads and discriminator
-    model.roi_heads.ignore_nocs = True
-    mrcnn_params = list(params_generator(model, ignore=['nocs_loss', 'nocs_heads']))
-    optimizer = Adam(mrcnn_params, lr=1e-4, betas=(0.5, 0.999))
-    run_training(model, dataloader, optimizer, num_epochs=2, save_prefix='mrcnn_')
+if True: # Skips pre-training mrcnn if false
+    # Either load a mask rcnn or train one.
+    if LOAD_MRCNN:
+        model.load_state_dict(torch.load(LOAD_MRCNN))
+        print(f'Loaded {LOAD_MRCNN}')
+    else:
+        # Freeze nocs heads and discriminator
+        model.roi_heads.ignore_nocs = True
+        mrcnn_params = list(params_generator(model, ignore=['nocs_loss', 'nocs_heads']))
+        optimizer = Adam(mrcnn_params, lr=1e-4, betas=(0.5, 0.999))
+        run_training(model, dataloader, optimizer, num_epochs=1, save_prefix='mrcnn_')
 
 
 # Only train nocs

@@ -3,6 +3,17 @@ from models.rcnn_transforms import GeneralizedRCNNTransformWithNocs
 from torchvision.models.detection.mask_rcnn import MaskRCNN
 import torch 
 
+from typing import Any, Optional
+from torch import nn
+from torchvision.models.detection.mask_rcnn import MaskRCNN_ResNet50_FPN_Weights
+from torchvision.models.detection.backbone_utils import (_validate_trainable_layers, 
+                                                         _resnet_fpn_extractor)
+from torchvision.models.detection._utils import overwrite_eps
+from torchvision.models.resnet import resnet50, ResNet50_Weights
+from torchvision.models._utils import _ovewrite_value_param
+from torchvision.ops import misc as misc_nn_ops
+
+
 class NOCS(MaskRCNN):
     def __init__(
         self,
@@ -43,10 +54,11 @@ class NOCS(MaskRCNN):
         mask_head=None,
         mask_predictor=None,
         # NOCS parameters
-        nocs_bins=32,
-        cache_results=False,
-        nocs_loss=torch.nn.functional.cross_entropy,  # can be cross entropy or discriminator
 
+        # nocs_bins=32,
+        # cache_results=False,
+        # nocs_loss=torch.nn.functional.cross_entropy,  # can be cross entropy or discriminator
+        # multiheaded_nocs=False,
         # Others
         **kwargs,
     ):
@@ -95,9 +107,10 @@ class NOCS(MaskRCNN):
         )
         self.roi_heads = RoIHeadsWithNocs.from_torchvision_roiheads(
                                                     self.roi_heads,
-                                                    nocs_num_bins=nocs_bins,
-                                                    cache_results = cache_results,
-                                                    nocs_loss=nocs_loss,)
+                                                    # nocs_num_bins=nocs_bins,
+                                                    # cache_results = cache_results,
+                                                    # nocs_loss=nocs_loss,
+                                                    **kwargs)
         
         self.cache = None
         
@@ -133,21 +146,6 @@ class NOCS(MaskRCNN):
         return result
 
 
-
-
-from typing import Any, Optional
-
-from torch import nn
-
-from torchvision.models.detection.mask_rcnn import MaskRCNN_ResNet50_FPN_Weights
-from torchvision.models.detection.backbone_utils import _validate_trainable_layers, _resnet_fpn_extractor
-from torchvision.models.detection._utils import overwrite_eps
-
-from torchvision.models.resnet import resnet50, ResNet50_Weights
-from torchvision.models._utils import _ovewrite_value_param
-
-from torchvision.ops import misc as misc_nn_ops
-
 def get_nocs_resnet50_fpn(
     *,
     maskrcnn_weights: Optional[MaskRCNN_ResNet50_FPN_Weights] = None,
@@ -162,7 +160,8 @@ def get_nocs_resnet50_fpn(
 
     if maskrcnn_weights is not None:
         weights_backbone = None
-        num_classes = _ovewrite_value_param("num_classes", num_classes, len(maskrcnn_weights.meta["categories"]))
+        num_classes = _ovewrite_value_param("num_classes", num_classes, 
+                                            len(maskrcnn_weights.meta["categories"]))
     elif num_classes is None:
         num_classes = 91
 

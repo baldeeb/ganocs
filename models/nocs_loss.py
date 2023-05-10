@@ -5,19 +5,7 @@ from torch.nn.functional import (cross_entropy,
                                  softmax)
 from models.nocs_util import select_labels
 from models.discriminator import DiscriminatorWithOptimizer
-import cv2 
-import matplotlib.pyplot as plt 
 
-# draw a single bounding box onto a numpy array image
-def draw_bounding_box(img, boxes):
-    numpify = lambda a: a.clone().permute(1,2,0).detach().cpu().numpy()
-    img = numpify(img)
-    for a in boxes:
-        x_min, y_min = int(a[0]), int(a[1])
-        x_max, y_max = int(a[2]), int(a[3])
-        color = (0, 255, 0)
-        cv2.rectangle(img,(x_min,y_min),(x_max,y_max), color, 2)
-    plt.imsave('temp.png', img/img.flatten().max())
 
 def project_on_boxes(gt, boxes, matched_idxs, M):
     # type: (Tensor, Tensor, Tensor, int) -> Tensor
@@ -46,7 +34,8 @@ def project_on_boxes(gt, boxes, matched_idxs, M):
 def discriminator_as_loss(discriminator:DiscriminatorWithOptimizer, 
                           proposals:torch.Tensor, 
                           targets:torch.Tensor,
-                          reduction:str='mean'):
+                          reduction:str='mean',
+                          mode='classification'):
     '''
     Args:
         proposals (Tensor): [B, 3, N, H, W] tensor of predicted nocs
@@ -56,18 +45,24 @@ def discriminator_as_loss(discriminator:DiscriminatorWithOptimizer,
         targets (Tensor): [B, 3, H, W] tensor of indices indicating
             which of the binary logits is the correct nocs value.'''
     
-    # Get weighted average of proposal
-    N = proposals.shape[2]
-    bin_idxs = torch.arange(N).to(proposals)
-    bin_idxs = bin_idxs[None, None, :, None, None]
-    soft_nocs = softmax(proposals, dim=2)
-    weighted_avg = (soft_nocs * bin_idxs).sum(dim=2) / N
+    if mode == 'classification':
+        # Get weighted average of proposal
+        N = proposals.shape[2]
+        bin_idxs = torch.arange(N).to(proposals)
+        bin_idxs = bin_idxs[None, None, :, None, None]
+        soft_nocs = softmax(proposals, dim=2)
+        prediction = (soft_nocs * bin_idxs).sum(dim=2) / N
+    elif mode == 'regression':
+        assert proposals.shape[2] == 1, 'Regression only supports 1 bin'
+        prediction = proposals.squeeze(2)
+    else:
+        raise ValueError(f'Unknown mode {mode}')
 
     # Train discriminator
-    discriminator.train_step(targets, weighted_avg)
+    discriminator.update(targets, prediction)
     
     # Get nocs loss
-    l = discriminator(weighted_avg)
+    l = discriminator(prediction)
     return binary_cross_entropy(l, torch.ones_like(l), reduction=reduction)
 
     
@@ -78,8 +73,9 @@ def nocs_loss(gt_labels,
               proposed_box_regions, 
               matched_ids, 
               reduction='mean',
-              loss_type='cross_entropy', 
-              loss_fx=cross_entropy):
+              loss_fx=cross_entropy,
+              mode='classification' # regression or classification
+              ):
     '''
     Calculates nocs loss. Supports cross_entropy and discriminator loss.
     Args: 
@@ -119,11 +115,13 @@ def nocs_loss(gt_labels,
     if targets.numel() == 0: return proposals.sum() * 0
 
     if loss_fx == cross_entropy:
+        assert mode == 'classification', 'Cross entropy only supports classification'
         targets = (targets * proposals.shape[2]).round().long()  # To indices
         return cross_entropy(proposals.transpose(1,2), 
                              targets,
                              reduction=reduction)
     elif isinstance(loss_fx, DiscriminatorWithOptimizer):
         return discriminator_as_loss(loss_fx, proposals, targets,
-                                     reduction=reduction)
+                                     reduction=reduction,
+                                     mode=mode)
 
