@@ -20,9 +20,13 @@ DATA_DIR = "/home/baldeeb/Code/pytorch-NOCS/data/habitat-generated/200of100scene
 # LOAD_MRCNN = '/home/baldeeb/Code/pytorch-NOCS/checkpoints/nocs/saved/disc_updates/9.pth'
 # LOAD_MRCNN = '/home/baldeeb/Code/pytorch-NOCS/checkpoints/nocs/saved/conjoined_regression/mrcnn_0.pth'
 # LOAD_MRCNN = '/home/baldeeb/Code/pytorch-NOCS/checkpoints/nocs/saved/disjoint_regression/normal_1.pth'
-LOAD_MRCNN = None
 
-DEVICE='cuda:0'
+LOAD_MRCNN = '/home/baldeeb/Code/pytorch-NOCS/checkpoints/nocs/1683730464.787386/fullGanNocs_lr3en4_b5_singleHead_16.pth'
+# LOAD_MRCNN = '/home/baldeeb/Code/pytorch-NOCS/checkpoints/nocs/1683731982.7751167/fullGanNocs_lr3en4_b5_multiHead14.pth'
+
+# LOAD_MRCNN = None
+
+DEVICE='cuda:1'
 CHKPT_PATH = pl.Path(f'/home/baldeeb/Code/pytorch-NOCS/checkpoints/nocs/{time()}')
 os.makedirs(CHKPT_PATH)
 
@@ -98,11 +102,14 @@ wandb.init(project="torch-nocs",
 # For traditional nocs training.
 # make sure that loss is set to cross entropys.
 if True:
+    if LOAD_MRCNN:
+        model.load_state_dict(torch.load(LOAD_MRCNN))
+        print(f'Loaded {LOAD_MRCNN}')
     optimizer = Adam(model.parameters(), lr=3e-4, betas=(0.5, 0.999))
     run_training(model, dataloader, optimizer, num_epochs=100, save_prefix='fullGanNocs_lr3en4_b5_singleHead_')
     exit(0)
 
-if True: # Skips pre-training mrcnn if false
+else: # Skips pre-training mrcnn if false
     # Either load a mask rcnn or train one.
     if LOAD_MRCNN:
         model.load_state_dict(torch.load(LOAD_MRCNN))
@@ -115,11 +122,11 @@ if True: # Skips pre-training mrcnn if false
         run_training(model, dataloader, optimizer, num_epochs=1, save_prefix='mrcnn_')
 
 
-# Only train nocs
-model.roi_heads.ignore_nocs = False
-mrcnn_params = list(params_generator(model, ignore=['nocs_loss', 'nocs_heads']))
-for p in mrcnn_params: p.requires_grad = False
-nocs_params = list(params_generator(model, select=['nocs_heads'], ignore=['nocs_loss']))
-optimizer = Adam(nocs_params, lr=2e-4, betas=(0.5, 0.999))
+    # Only train nocs
+    model.roi_heads.ignore_nocs = False
+    mrcnn_params = list(params_generator(model, ignore=['nocs_loss', 'nocs_heads']))
+    for p in mrcnn_params: p.requires_grad = False
+    nocs_params = list(params_generator(model, select=['nocs_heads'], ignore=['nocs_loss']))
+    optimizer = Adam(nocs_params, lr=2e-4, betas=(0.5, 0.999))
 
-run_training(model, dataloader, optimizer, num_epochs=10)
+    run_training(model, dataloader, optimizer, num_epochs=10)
