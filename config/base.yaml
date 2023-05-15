@@ -1,0 +1,31 @@
+project_name: 'pytorch-NOCS'
+run_name:     'default'
+
+dataloader:
+  dir: '/home/baldeeb/Code/pytorch-NOCS/data/habitat-generated/200of100scenes_26selectChairs'
+  batch_size: 1
+  num_workers: None
+  shuffle: False
+
+
+load_checkpoint: None
+checkpoint_save_dir: '/home/baldeeb/Code/pytorch-NOCS/checkpoints'
+
+# Devices to be used. 
+#   - If multiple are specified, data parallelization is employed
+#   - If empty list currently throws error.
+#       TODO: change this behavior to using all
+devices: [cuda:0]
+
+model:
+  nocs_loss: discriminator
+  nocs_num_bins: 1
+  nocs_loss_mode: 'regression'
+  multiheaded_nocs: False
+  
+  optimizer:
+    name: Adam
+    lr: 0.0001
+    weight_decay: 0.0001
+    momentum: 0.9
+    nesterov: True
