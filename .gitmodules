@@ -1,4 +1,4 @@
-[submodule "habitat_data_util"]
-	path = habitat_data_util
-	url = git@github.com:baldeeb/habitat-datagen-util.git
-	branch = main
+
+[submodule "habitat_datagen_util"]
+	path = habitat_datagen_util
+	url = git@github.com:baldeeb/habitat_datagen_util.git

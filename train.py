@@ -2,9 +2,10 @@ from models.nocs import get_nocs_resnet50_fpn
 from models.discriminator import DiscriminatorWithOptimizer
 from torchvision.models.detection.mask_rcnn import MaskRCNN_ResNet50_FPN_Weights
 
-from habitat_data_util.utils.dataset import HabitatDataloader
+from habitat_datagen_util.utils.dataset import HabitatDataset
+from habitat_datagen_util.utils.collate_tools import collate_fn
 from torch.utils.data import DataLoader
-from utils.dataset import collate_fn
+# from utils.dataset import collate_fn
 from torch.optim import Adam
 import torch 
 from tqdm import tqdm
@@ -89,7 +90,7 @@ model = get_nocs_resnet50_fpn(
                 )
 model.to(DEVICE).train()
 
-habitatdata = HabitatDataloader(DATA_DIR)
+habitatdata = HabitatDataset(DATA_DIR)
 dataloader = DataLoader(habitatdata, 
                         batch_size=5, 
                         shuffle=True, 

@@ -3,7 +3,7 @@
 import numpy as np
 import time
 
-from utils.aligning import estimateSimilarityTransform
+from utils.alinging_tools import estimateSimilarityTransform
 
 def backproject(depth, intrinsics, instance_mask):
     intrinsics_inv = np.linalg.inv(intrinsics)
@@ -40,74 +40,35 @@ def align(masks :np.ndarray,
     The first index of each of coords, masks, and depth is expected to indicate the 
     number of instances that is being processed.
     Args: 
-        masks of shape [B, H, W]
-        coords of shape [B, C, H, W]
-        depth [H, W] associated with the image that is the source of the detection.
-        intrinsic [3, 3]
+        masks  [B, H, W] is a set of masks one per object in view. 
+        coords [3, H, W] is an image of NOCS coordinates.
+        depth  [   H, W] depth associated with the NOCS image.
+        intrinsic [3, 3] is the camera intrinsic matrix.
         if_norm ******
         with_scale ******
         '''
-    num_instances = masks.size(0)
+    num_instances = masks.shape[0]
     if num_instances == 0:
-        return np.zeros((0, 4, 4)), np.ones((0, 3)), elapses
-
-    elapses = np.zeros(elapses)
-    RTs = np.zeros((num_instances, 4, 4))
-    bbox_scales = np.ones((num_instances, 3))
-    
-    for i in range(num_instances):
-        # mask = masks[:, :, i]
-        # coord = coords[:, :, i, :]
-
-        result = align_sample(masks[:, :, i], 
-                              coords[:, :, i, :], 
+        return np.zeros((0, 4, 4)), np.ones((0, 3)), np.zeros((0)) 
+    time_elapsed  = np.zeros(num_instances)
+    transforms    = np.zeros((num_instances, 4, 4))
+    scales        = np.ones((num_instances, 3))
+    for i, mask in enumerate(masks):
+        result = align_sample(mask, coords, 
                               depth, intrinsic, 
                               if_norm=if_norm, 
                               with_scale=with_scale)
-        RTs[i, :, :], bbox_scales[i, :], elapses[i] = result 
-        
-        # abs_coord_pts = np.abs(coord[mask==1] - 0.5)
-        # bbox_scales[i, :] = 2 * np.amax(abs_coord_pts, axis=0)
-
-        # pts, idxs = backproject(depth, intrinsic, mask)
-        # coord_pts = coord[idxs[0], idxs[1], :] - 0.5
-
-        # if if_norm:
-        #     scale = np.linalg.norm(bbox_scales[i, :])
-        #     bbox_scales[i, :] /= scale
-        #     coord_pts /= scale
-
-        # start = time.time()
-        
-        # scales, rotation, translation, _ = estimateSimilarityTransform(coord_pts, pts, False)
-
-        # aligned_RT = np.zeros((4, 4), dtype=np.float32) 
-        # if with_scale:
-        #     aligned_RT[:3, :3] = np.diag(scales) / 1000 @ rotation.transpose()
-        # else:
-        #     aligned_RT[:3, :3] = rotation.transpose()
-        # aligned_RT[:3, 3] = translation / 1000
-        # aligned_RT[3, 3] = 1
-        
-        # elapses[i] = time.time() - start
-
-        # # from camera world to computer vision frame
-        # z_180_RT = np.zeros((4, 4), dtype=np.float32)
-        # z_180_RT[:3, :3] = np.diag([-1, -1, 1])
-        # z_180_RT[3, 3] = 1
-
-        # RTs[i, :, :] = z_180_RT @ aligned_RT 
+        transforms[i], scales[i], time_elapsed[i] = result 
+    return transforms, scales, time_elapsed
 
 
-    return RTs, bbox_scales, elapses
-
-
-
-def align_sample(mask, coord, depth, intrinsic, if_norm=False, with_scale=True):
-    abs_coord_pts = np.abs(coord[mask==1] - 0.5)
-    bbox_scale = 2 * np.amax(abs_coord_pts, axis=0)
+def align_sample(mask:np.ndarray, coord:np.ndarray, 
+                 depth:np.ndarray, intrinsic:np.ndarray, 
+                 if_norm=False, with_scale=True):
+    abs_coord_pts = np.abs(coord[:, mask==1] - 0.5)
+    bbox_scale = 2 * np.amax(abs_coord_pts, axis=1)
     pts, idxs = backproject(depth, intrinsic, mask)
-    coord_pts = coord[idxs[0], idxs[1], :] - 0.5
+    coord_pts = coord[:, idxs[0], idxs[1]] - 0.5
 
     if if_norm:
         scale = np.linalg.norm(bbox_scale)
@@ -115,7 +76,7 @@ def align_sample(mask, coord, depth, intrinsic, if_norm=False, with_scale=True):
         coord_pts /= scale
 
     start = time.time()
-    scales, rotation, translation, _ = estimateSimilarityTransform(coord_pts, pts, False)
+    scales, rotation, translation, _ = estimateSimilarityTransform(coord_pts.T, pts, False)
     aligned_RT = np.zeros((4, 4), dtype=np.float32) 
     if with_scale:
         aligned_RT[:3, :3] = np.diag(scales) / 1000 @ rotation.transpose()
@@ -132,4 +93,4 @@ def align_sample(mask, coord, depth, intrinsic, if_norm=False, with_scale=True):
 
     RTs = z_180_RT @ aligned_RT 
 
-    RTs, bbox_scale, dt
+    return RTs, bbox_scale, dt
