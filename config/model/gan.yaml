@@ -1,0 +1,10 @@
+defaults:
+  - base
+nocs_loss: 
+  _target_: models.discriminator.DiscriminatorWithOptimizer
+  optim_args:
+    lr: 0.0003
+    betas: [0.5, 0.999]
+nocs_num_bins: 1
+nocs_loss_mode: regression
+multiheaded_nocs: True

@@ -26,6 +26,7 @@ class NocsHeads(nn.Module):
         if mode == 'regression':
             last_activation = nn.Tanh()
             assert self.num_bins == 1, 'Regression only supports 1 bin'
+        else: last_activation = None
 
         if multiheaded: 
             self.head = self._get_multi_head(keys, in_channels, 
@@ -33,7 +34,7 @@ class NocsHeads(nn.Module):
                                                 self.num_classes * self.num_bins,
                                                 dilation=1, 
                                                 norm_layer=norm_layer,
-                                                  last_activation=last_activation,
+                                                last_activation=last_activation,
                                                   )
         else:
             self.head = self._get_single_head(keys, 

@@ -1,3 +1,5 @@
 conda create -n torch-nocs python=3.10
 conda install -c conda-forge pycocotools
 conda install pytorch torchvision torchaudio pytorch-cuda=11.7 -c pytorch -c nvidia
+
+pip install hydra-core --update

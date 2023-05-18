@@ -1,0 +1,8 @@
+defaults:
+  - base
+nocs_loss: 
+  _target_: hydra.utils.get_method
+  path: torch.nn.functional.cross_entropy
+nocs_num_bins: 32
+nocs_loss_mode: classification
+multiheaded_nocs: True
