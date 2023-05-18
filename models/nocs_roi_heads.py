@@ -68,6 +68,7 @@ class RoIHeadsWithNocs(RoIHeads):
                                     mode=nocs_loss_mode)
         self.ignore_nocs = False
         self.nocs_loss = nocs_loss
+        self._kwargs = kwargs
             
     def has_nocs(self): 
         if self.ignore_nocs: return False
@@ -201,7 +202,8 @@ class RoIHeadsWithNocs(RoIHeads):
                                                        pos_matched_idxs,
                                                        reduction=reduction,
                                                        loss_fx=self.nocs_loss,
-                                                       mode=self.nocs_loss_mode)
+                                                       mode=self.nocs_loss_mode,
+                                                       **self._kwargs)
                     if self.cache_results:
                         split_loss = separate_image_results(loss_mask['loss_nocs'], labels)
                         split_nocs = separate_image_results(nocs_proposals, labels)

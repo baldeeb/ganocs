@@ -6,7 +6,6 @@ from torch.nn.functional import (cross_entropy,
 from models.nocs_util import select_labels
 from models.discriminator import DiscriminatorWithOptimizer
 
-
 def project_on_boxes(gt, boxes, matched_idxs, M):
     # type: (Tensor, Tensor, Tensor, int) -> Tensor
     """ Code borrowed from torchvision.models.detection.roi_heads.project_masks_on_boxes
@@ -74,8 +73,10 @@ def nocs_loss(gt_labels,
               matched_ids, 
               reduction='mean',
               loss_fx=cross_entropy,
-              mode='classification' # regression or classification
-              ):
+              mode='classification', # regression or classification
+              dispersion_loss=None,
+              dispersion_weight=0.0,
+              **_):
     '''
     Calculates nocs loss. Supports cross_entropy and discriminator loss.
     Args: 
@@ -93,6 +94,8 @@ def nocs_loss(gt_labels,
             matching ground truth of each proposal.
         reduction (str): 'none', 'mean' or other pytorch's cross entropy 
             reductions.
+        dispersion_loss (Callable): A function that takes the nocs proposals
+            and returns a scalar loss per batch.
     Returns 
         loss (Tensor): An element or list of values depending on the reduction
     
@@ -117,11 +120,15 @@ def nocs_loss(gt_labels,
     if loss_fx == cross_entropy:
         assert mode == 'classification', 'Cross entropy only supports classification'
         targets = (targets * proposals.shape[2]).round().long()  # To indices
-        return cross_entropy(proposals.transpose(1,2), 
+        loss = cross_entropy(proposals.transpose(1,2), 
                              targets,
                              reduction=reduction)
     elif isinstance(loss_fx, DiscriminatorWithOptimizer):
-        return discriminator_as_loss(loss_fx, proposals, targets,
+        loss = discriminator_as_loss(loss_fx, proposals, targets,
                                      reduction=reduction,
                                      mode=mode)
 
+    if dispersion_loss is not None:
+        loss += dispersion_loss(proposals) * dispersion_weight
+
+    return loss

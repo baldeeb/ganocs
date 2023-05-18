@@ -1,11 +1,8 @@
 defaults:
   - model: original
 
-model:
-  load: ./checkpoints/nocs_classification/1684375078.9997997/torch-nocs-classification_2.pth
-
 project_name: torch-nocs-classification
-run_name:     new_eval_metrics
+run_name:     basic
 num_epochs: 5
 batches_before_eval: 5
 checkpoint_dir: ./checkpoints/nocs_classification/${now:%Y-%m-%d_%H-%M-%S}
