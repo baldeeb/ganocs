@@ -5,18 +5,26 @@ model:
   load: ./checkpoints/nocs_classification/1684375078.9997997/torch-nocs-classification_2.pth
 
 project_name: torch-nocs-classification
-run_name:     default
+run_name:     new_eval_metrics
 num_epochs: 5
+batches_before_eval: 5
+checkpoint_dir: ./checkpoints/nocs_classification/${now:%Y-%m-%d_%H-%M-%S}
+
+device: cuda:1
 
 data:
   training:
     dir: ./data/habitat/train
     loader:
-      batch_size: 1
-      shuffle: False
+      batch_size: 6
+      shuffle: True
+  testing:
+    batches: 10
+    dir: ./data/habitat/test
+    loader:
+      batch_size: 6
+      shuffle: True
 
-checkpoint_dir: ./checkpoints/nocs_classification/${now:%Y-%m-%d_%H-%M-%S}
-device: cuda:1
 
 optimizer:
   _target_: torch.optim.Adam

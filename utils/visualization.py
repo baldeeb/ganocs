@@ -11,38 +11,7 @@ previously noted:
 
 import cv2
 import numpy as np
-
-def get_3d_bbox(scale, shift = 0):
-    """
-    Input: 
-        scale: [3] or scalar
-        shift: [3] or scalar
-    Return 
-        bbox_3d: [3, N]
-
-    """
-    if hasattr(scale, "__iter__"):
-        bbox_3d = np.array([[scale[0] / 2, +scale[1] / 2, scale[2] / 2],
-                  [scale[0] / 2, +scale[1] / 2, -scale[2] / 2],
-                  [-scale[0] / 2, +scale[1] / 2, scale[2] / 2],
-                  [-scale[0] / 2, +scale[1] / 2, -scale[2] / 2],
-                  [+scale[0] / 2, -scale[1] / 2, scale[2] / 2],
-                  [+scale[0] / 2, -scale[1] / 2, -scale[2] / 2],
-                  [-scale[0] / 2, -scale[1] / 2, scale[2] / 2],
-                  [-scale[0] / 2, -scale[1] / 2, -scale[2] / 2]]) + shift
-    else:
-        bbox_3d = np.array([[scale / 2, +scale / 2, scale / 2],
-                  [scale / 2, +scale / 2, -scale / 2],
-                  [-scale / 2, +scale / 2, scale / 2],
-                  [-scale / 2, +scale / 2, -scale / 2],
-                  [+scale / 2, -scale / 2, scale / 2],
-                  [+scale / 2, -scale / 2, -scale / 2],
-                  [-scale / 2, -scale / 2, scale / 2],
-                  [-scale / 2, -scale / 2, -scale / 2]]) +shift
-
-    bbox_3d = bbox_3d.transpose()
-    return bbox_3d
-
+from utils.eval_tools import get_3d_bbox, transform_coordinates_3d
 
 def calculate_2d_projections(coordinates_3d, intrinsics):
     """
@@ -57,22 +26,6 @@ def calculate_2d_projections(coordinates_3d, intrinsics):
     projected_coordinates = projected_coordinates.transpose()
     projected_coordinates = np.array(projected_coordinates, dtype=np.int32)
     return projected_coordinates
-
- 
-def transform_coordinates_3d(coordinates, RT):
-    """
-    Input: 
-        coordinates: [3, N]
-        RT: [4, 4]
-    Return 
-        new_coordinates: [3, N]
-
-    """
-    assert coordinates.shape[0] == 3
-    coordinates = np.vstack([coordinates, np.ones((1, coordinates.shape[1]), dtype=np.float32)])
-    new_coordinates = RT @ coordinates
-    new_coordinates = new_coordinates[:3, :]/new_coordinates[3, :]
-    return new_coordinates
 
 
 def draw(img, imgpts, axes, color):

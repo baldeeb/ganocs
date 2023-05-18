@@ -54,11 +54,13 @@ def align(masks :np.ndarray,
     transforms    = np.zeros((num_instances, 4, 4))
     scales        = np.ones((num_instances, 3))
     for i, mask in enumerate(masks):
-        result = align_sample(mask, coords, 
-                              depth, intrinsic, 
-                              if_norm=if_norm, 
-                              with_scale=with_scale)
-        transforms[i], scales[i], time_elapsed[i] = result 
+        try:
+            result = align_sample(mask, coords, 
+                                depth, intrinsic, 
+                                if_norm=if_norm, 
+                                with_scale=with_scale)
+            transforms[i], scales[i], time_elapsed[i] = result 
+        except RuntimeWarning: pass
     return transforms, scales, time_elapsed
 
 
@@ -78,6 +80,7 @@ def align_sample(mask:np.ndarray, coord:np.ndarray,
     start = time.time()
     scales, rotation, translation, _ = estimateSimilarityTransform(coord_pts.T, pts, False)
     aligned_RT = np.zeros((4, 4), dtype=np.float32) 
+    if scales is None: raise RuntimeWarning('Could not align object.')
     if with_scale:
         aligned_RT[:3, :3] = np.diag(scales) / 1000 @ rotation.transpose()
     else:
