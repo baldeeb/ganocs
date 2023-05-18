@@ -4,3 +4,4 @@ temp/**
 data
 wandb
 checkpoints
+outputs
