@@ -59,7 +59,7 @@ class NocsDetector:
         images = self._to_tensor(images)
         results = self.model(images)
 
-        if len(depth.shape) == 2: depth = depth.unsqueeze(0)
+        if len(depth.shape) == 2: depth = depth[None]
 
         for i, (r, d) in enumerate(zip(results, depth)):
             results[i]['transforms'], results[i]['scales'] = [], []
@@ -70,14 +70,14 @@ class NocsDetector:
                 results[i]['transforms'].append(Ts)
                 results[i]['scales'].append(Ss)
     
-            if self._draw_box:
-                annotated_img = self._to_ndarr(images[i].permute(1,2,0))
-                for t, s, in zip(Ts, Ss):
-                    annotated_img = draw_3d_boxes(annotated_img, 
-                                                self._to_ndarr(t), 
-                                                self._to_ndarr(s), 
-                                                self._K)
-                results[i]['annotated_image'] = annotated_img
+                if self._draw_box:
+                    annotated_img = self._to_ndarr(images[i].permute(1,2,0))
+                    for t, s, in zip(Ts, Ss):
+                        annotated_img = draw_3d_boxes(annotated_img, 
+                                                    self._to_ndarr(t), 
+                                                    self._to_ndarr(s), 
+                                                    self._K)
+                    results[i]['annotated_image'] = annotated_img
 
         return results
             
