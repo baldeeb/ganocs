@@ -1,135 +1,117 @@
-from models.nocs import get_nocs_resnet50_fpn
-from models.discriminator import DiscriminatorWithOptimizer
-from torchvision.models.detection.mask_rcnn import MaskRCNN_ResNet50_FPN_Weights
-
 from habitat_datagen_util.utils.dataset import HabitatDataset
 from habitat_datagen_util.utils.collate_tools import collate_fn
 from torch.utils.data import DataLoader
-# from utils.dataset import collate_fn
-from torch.optim import Adam
+from models.losses.nocs_image import l2_nocs_image_loss
 import torch 
 from tqdm import tqdm
 import wandb
 import pathlib as pl
+import numpy as np
+from omegaconf import DictConfig, OmegaConf
+import hydra
+from utils.visualization import draw_3d_boxes
 import os
-from time import time
 
-# DATA_DIR = "/home/baldeeb/Code/pytorch-NOCS/data/habitat-generated/00847-bCPU9suPUw9/metadata.json"
-# DATA_DIR = "/home/baldeeb/Code/pytorch-NOCS/data/habitat-generated/200of100scenes_26selectChairs"  # larger dataset
-DATA_DIR = "/home/baldeeb/Code/pytorch-NOCS/data/habitat/train"  # larger dataset
+def save_model(model, path):
+    path = pl.Path(path)
+    if not path.parent.exists():
+        os.makedirs(path.parent)
+    torch.save(model.state_dict(), path)
 
-# LOAD_MRCNN = '/home/baldeeb/Code/pytorch-NOCS/checkpoints/nocs/saved/disc_updates/mrcnn_1.pth'
-# LOAD_MRCNN = '/home/baldeeb/Code/pytorch-NOCS/checkpoints/nocs/saved/disc_updates/9.pth'
-# LOAD_MRCNN = '/home/baldeeb/Code/pytorch-NOCS/checkpoints/nocs/saved/conjoined_regression/mrcnn_0.pth'
-# LOAD_MRCNN = '/home/baldeeb/Code/pytorch-NOCS/checkpoints/nocs/saved/disjoint_regression/normal_1.pth'
+@hydra.main(version_base=None, config_path='./config', config_name='base')
+def run(cfg: DictConfig) -> None:
 
-# LOAD_MRCNN = '/home/baldeeb/Code/pytorch-NOCS/checkpoints/nocs/1683730464.787386/fullGanNocs_lr3en4_b5_singleHead_16.pth'
-# LOAD_MRCNN = '/home/baldeeb/Code/pytorch-NOCS/checkpoints/nocs/1683731982.7751167/fullGanNocs_lr3en4_b5_multiHead14.pth'
+    def targets2device(targets, device):
+        for i in range(len(targets)): 
+            for k in ['masks', 'labels', 'boxes']: 
+                targets[i][k] = targets[i][k].to(device)
+        return targets
 
-LOAD_MRCNN = None
+    # Data
+    training_data = HabitatDataset(cfg.data.training.dir)
+    training_dataloader = DataLoader(training_data, 
+                            **cfg.data.training.loader,
+                            collate_fn=collate_fn)
+    test_data = HabitatDataset(cfg.data.testing.dir)
+    testing_dataloader = DataLoader(test_data, 
+                            **cfg.data.testing.loader,
+                            collate_fn=collate_fn)
 
-DEVICE='cuda:0'
-CHKPT_PATH = pl.Path(f'/home/baldeeb/Code/pytorch-NOCS/checkpoints/nocs_classification/{time()}')
-os.makedirs(CHKPT_PATH)
+    # Model
+    model = hydra.utils.instantiate(cfg.model)
+    if cfg.model.load:
+        model.load_state_dict(torch.load(cfg.model.load))
+        print(f'Loaded {cfg.model.load}')
+    model.to(cfg.device).train()
 
-def targets2device(targets, device):
-    for i in range(len(targets)): 
-        for k in ['masks', 'labels', 'boxes']: 
-            targets[i][k] = targets[i][k].to(device)
-    return targets
+    # Optimizer
+    optimizer = hydra.utils.instantiate(cfg.optimizer, 
+                                        params=model.parameters())
 
-def run_training(model, dataloader, optimizer, num_epochs, save_prefix=''):
-    for epoch in tqdm(range(num_epochs)):
-        for itr, (images, targets) in enumerate(dataloader):
-            images = images.to(DEVICE)
-            targets = targets2device(targets, DEVICE)
+    # Logger
+    wandb.init(project=cfg.project_name, 
+               name=cfg.run_name,
+               config=cfg)
+
+    # Pretrained wieghts eval
+    eval(model, testing_dataloader, cfg.device, 
+         test_data.intrinsic(), cfg.data.testing.batches)
+
+    for epoch in tqdm(range(cfg.num_epochs)):
+        for batch_i, (images, targets) in enumerate(training_dataloader):
+            images = images.to(cfg.device)
+            targets = targets2device(targets, cfg.device)
             losses = model(images, targets)
             loss = sum(losses.values())
             optimizer.zero_grad()
             loss.backward()
             optimizer.step()
-            
             wandb.log(losses)
-            wandb.log(nocs_discriminator.log)
             wandb.log({'loss': loss})
-
-            # Save image and NOCS every 10 iterations
-            if itr % 10 == 0: 
-                with torch.no_grad():
-                    model.eval()
-                    r = model(images)
-                    if sum([v.numel() for k, v in r[0].items()]) != 0:
-                        _printable = lambda a: a.permute(1,2,0).detach().cpu().numpy()
-                        wandb.log({'image': wandb.Image(_printable(images[0]))})
-                        if 'nocs' in r[0]:
-                            wandb.log({'nocs':wandb.Image(_printable(r[0]['nocs'][0]))})
-                    model.train()
-        torch.save(model.state_dict(), CHKPT_PATH/f'{save_prefix}{epoch}.pth')
+            if batch_i % cfg.batches_before_eval == 0:
+                eval(model, testing_dataloader, cfg.device, 
+                     test_data.intrinsic(), cfg.data.testing.batches) 
+        
+        save_model(model, pl.Path(cfg.checkpoint_dir)/f'{cfg.run_name}_{epoch}.pth')
         wandb.log({'epoch': epoch})
 
 
-def params_generator(model, ignore=None, select=None):
-    for name, param in model.named_parameters():
-        if ignore and any([x in name for x in ignore]):
-            continue
-        if select and not any([x in name for x in select]):
-            continue
-        yield param
+def eval(model, dataloader, device, intrinsic, n_batches):
+    with torch.no_grad():
+        model.eval()
+        loss = []
+        for batch_i, (images, targets) in enumerate(dataloader):
+            images = images.to(device)
+            results = model(images)
+            for result, target in zip(results, targets):
+                loss.append(l2_nocs_image_loss(result['nocs'], 
+                                          target['nocs'], 
+                                          target['masks'],
+                                          device=device))
+            if n_batches is not None and batch_i >= n_batches:
+                wandb.log({'eval_nocs_loss': sum(loss)/len(loss)})
+                for result, image, target in zip(results, images, targets):
+                    if np.prod(result['nocs'].shape) == 0: continue
+                    img = draw_box(image*255.0, 
+                                   result['masks'][0] > 0.5, 
+                                   result['nocs'][0],
+                                   np.array(target['depth']), 
+                                   intrinsic)
+                    _printable = lambda a: a.permute(1,2,0).detach().cpu().numpy()
+                    wandb.log({'image': wandb.Image(img),
+                            'nocs':  wandb.Image(_printable(result['nocs'][0])),})
+                break
+        model.train()
+    
 
+from utils.align import align
+def draw_box(image, mask, nocs, depth, intrinsic):
+    _to_ndarray = lambda a : a.clone().detach().cpu().numpy() if isinstance(a, torch.Tensor) else a
+    transforms, scales, _ = align(_to_ndarray(mask), _to_ndarray(nocs), 
+                                  _to_ndarray(depth), _to_ndarray(intrinsic))
+    img = draw_3d_boxes(_to_ndarray(image.permute(1,2,0)), _to_ndarray(transforms[0]), 
+                        _to_ndarray(scales[0]), _to_ndarray(intrinsic))
+    return img
 
-# Initialize Model
-nocs_discriminator = DiscriminatorWithOptimizer(
-                        optim_args={'lr': 3e-4,
-                                    'betas': (0.5, 0.999)},
-                    )
-model = get_nocs_resnet50_fpn(
-                maskrcnn_weights=MaskRCNN_ResNet50_FPN_Weights.DEFAULT,
-                # nocs_loss=nocs_discriminator, # NOTE: default is cross entropy
-                nocs_num_bins=32,
-                nocs_loss_mode = 'classification',
-                multiheaded_nocs = True
-                )
-model.to(DEVICE).train()
-
-habitatdata = HabitatDataset(DATA_DIR)
-dataloader = DataLoader(habitatdata, 
-                        batch_size=5, 
-                        shuffle=True, 
-                        collate_fn=collate_fn)
-
-wandb.init(project="torch-nocs-classification", 
-           name="first-run")
-
-
-# For traditional nocs training.
-# make sure that loss is set to cross entropys.
-if True:
-    if LOAD_MRCNN:
-        model.load_state_dict(torch.load(LOAD_MRCNN))
-        print(f'Loaded {LOAD_MRCNN}')
-    # optimizer = Adam(model.parameters(), lr=3e-4, betas=(0.5, 0.999))  # NOTE: used with discriminator
-    optimizer = Adam(model.parameters())
-    run_training(model, dataloader, optimizer, num_epochs=100, save_prefix='torch-nocs-classification_')
-    exit(0)
-
-else: # Skips pre-training mrcnn if false
-    # Either load a mask rcnn or train one.
-    if LOAD_MRCNN:
-        model.load_state_dict(torch.load(LOAD_MRCNN))
-        print(f'Loaded {LOAD_MRCNN}')
-    else:
-        # Freeze nocs heads and discriminator
-        model.roi_heads.ignore_nocs = True
-        mrcnn_params = list(params_generator(model, ignore=['nocs_loss', 'nocs_heads']))
-        optimizer = Adam(mrcnn_params, lr=1e-4, betas=(0.5, 0.999))
-        run_training(model, dataloader, optimizer, num_epochs=1, save_prefix='mrcnn_')
-
-
-    # Only train nocs
-    model.roi_heads.ignore_nocs = False
-    mrcnn_params = list(params_generator(model, ignore=['nocs_loss', 'nocs_heads']))
-    for p in mrcnn_params: p.requires_grad = False
-    nocs_params = list(params_generator(model, select=['nocs_heads'], ignore=['nocs_loss']))
-    optimizer = Adam(nocs_params, lr=2e-4, betas=(0.5, 0.999))
-
-    run_training(model, dataloader, optimizer, num_epochs=10)
+if __name__ == '__main__':
+    run()
