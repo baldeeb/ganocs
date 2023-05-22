@@ -9,11 +9,11 @@ def save_nocs(model, path):
         os.makedirs(path.parent)
     torch.save(model.state_dict(), path)
 
-def load_nocs(checkpoint):
+def load_nocs(checkpoint, **kwargs):
     # TODO: move this to a utils function
     path = pl.Path(checkpoint)
-    if not path.is_file() or path.suffixes()[-1] == '.pth':
+    if not path.is_file() or path.suffixes[-1] != '.pth':
         raise ValueError(f'Checkpoint {checkpoint} is not a valid path to a .pth file.')
-    m = get_nocs_resnet50_fpn()
+    m = get_nocs_resnet50_fpn(**kwargs)
     m.load_state_dict(torch.load(checkpoint))
     return m
