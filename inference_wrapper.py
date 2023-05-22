@@ -38,9 +38,28 @@ class NocsDetector:
             return np.array(a)
         else: return a
 
+    def _to_tensor(self, a):
+        if isinstance(a, np.ndarray):
+            a = torch.from_numpy(a).to(self._device)
+        elif isinstance(a, torch.Tensor):
+            a = a.to(self._device)
+        if len(a.shape) == 3:
+            a = a.unsqueeze(0)
+        return a
+
+
     def __call__(self, images, depth):
-        images = images.to(self._device)
+        '''
+        Args:
+            images (torch.Tensor): [(B,) 3, H, W] a batch of (or single) images.
+            depth (torch.Tensor): [(B,) H, W] a batch of (or single) depth maps.
+        '''
+            
+
+        images = self._to_tensor(images)
         results = self.model(images)
+
+        if len(depth.shape) == 2: depth = depth.unsqueeze(0)
 
         for i, (r, d) in enumerate(zip(results, depth)):
             results[i]['transforms'], results[i]['scales'] = [], []
