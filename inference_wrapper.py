@@ -2,9 +2,9 @@ import torch
 import torchvision
 import numpy as np
 
-from utils.visualization import draw_3d_boxes
-from utils.align import align
-from utils.load_save import load_nocs
+from torch_nocs.utils.visualization import draw_3d_boxes
+from torch_nocs.utils.align import align
+from torch_nocs.utils.load_save import load_nocs
 
 class NocsDetector:
 

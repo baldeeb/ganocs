@@ -1,5 +1,5 @@
-from models.nocs_roi_heads import RoIHeadsWithNocs
-from models.rcnn_transforms import GeneralizedRCNNTransformWithNocs
+from torch_nocs.models.nocs_roi_heads import RoIHeadsWithNocs
+from torch_nocs.models.rcnn_transforms import GeneralizedRCNNTransformWithNocs
 from torchvision.models.detection.mask_rcnn import MaskRCNN
 import torch 
 

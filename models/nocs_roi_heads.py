@@ -9,9 +9,9 @@ from torchvision.models.detection.roi_heads import (
     maskrcnn_inference,
     keypointrcnn_loss, keypointrcnn_inference,
     )
-from models.nocs_loss import nocs_loss
-from models.nocs_util import select_nocs_proposals, separate_image_results
-from models.nocs_heads import NocsHeads
+from torch_nocs.models.nocs_loss import nocs_loss
+from torch_nocs.models.nocs_util import select_nocs_proposals, separate_image_results
+from torch_nocs.models.nocs_heads import NocsHeads
 
 class RoIHeadsWithNocs(RoIHeads):
     def __init__(

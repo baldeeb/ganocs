@@ -3,7 +3,7 @@
 import numpy as np
 import time
 
-from utils.alinging_tools import estimateSimilarityTransform
+from torch_nocs.utils.alinging_tools import estimateSimilarityTransform
 
 def backproject(depth, intrinsics, instance_mask):
     intrinsics_inv = np.linalg.inv(intrinsics)

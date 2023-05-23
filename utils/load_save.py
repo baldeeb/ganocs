@@ -1,7 +1,7 @@
 import pathlib as pl
 import os
 import torch
-from models.nocs import get_nocs_resnet50_fpn
+from torch_nocs.models.nocs import get_nocs_resnet50_fpn
 
 def save_nocs(model, path):
     path = pl.Path(path)

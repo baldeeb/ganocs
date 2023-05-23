@@ -3,8 +3,8 @@ from torchvision.ops import boxes as _, roi_align
 from torch.nn.functional import (cross_entropy, 
                                  binary_cross_entropy, 
                                  softmax)
-from models.nocs_util import select_labels
-from models.discriminator import DiscriminatorWithOptimizer
+from torch_nocs.models.nocs_util import select_labels
+from torch_nocs.models.discriminator import DiscriminatorWithOptimizer
 
 def project_on_boxes(gt, boxes, matched_idxs, M):
     # type: (Tensor, Tensor, Tensor, int) -> Tensor
