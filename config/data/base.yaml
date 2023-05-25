@@ -1,0 +1,15 @@
+training:
+  dir: ./data/habitat/train
+  loader:
+    batch_size: 6
+    shuffle: True
+    collate_fn: 
+      _target_:  habitat_datagen_util.utils.collate_tools.CollateFunctor
+testing:
+  batches: 10
+  dir: ./data/habitat/test
+  loader:
+    batch_size: 6
+    shuffle: True
+    collate_fn: 
+      _target_:  habitat_datagen_util.utils.collate_tools.CollateFunctor

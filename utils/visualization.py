@@ -11,7 +11,7 @@ previously noted:
 
 import cv2
 import numpy as np
-from utils.eval_tools import get_3d_bbox, transform_coordinates_3d
+from utils.evaluation.tools import get_3d_bbox, transform_coordinates_3d
 
 def calculate_2d_projections(coordinates_3d, intrinsics):
     """

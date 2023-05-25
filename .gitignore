@@ -1,7 +1,7 @@
 .vscode
 __pycache__
 temp/**
-data
+/data/
 wandb
 checkpoints
 outputs

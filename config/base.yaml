@@ -1,30 +1,11 @@
 defaults:
-  - model: original
+  - model: base
+  - data: base
+  - optimization: base
 
 project_name: torch-nocs-classification
 run_name:     basic
 num_epochs: 5
 batches_before_eval: 5
 checkpoint_dir: ./checkpoints/nocs_classification/${now:%Y-%m-%d_%H-%M-%S}
-
-device: cuda:1
-
-data:
-  training:
-    dir: ./data/habitat/train
-    loader:
-      batch_size: 6
-      shuffle: True
-  testing:
-    batches: 10
-    dir: ./data/habitat/test
-    loader:
-      batch_size: 6
-      shuffle: True
-
-
-optimizer:
-  _target_: torch.optim.Adam
-  lr: 0.0001
-  weight_decay: 0.0001
-  betas: [0.9, 0.99]
+device: cuda:0

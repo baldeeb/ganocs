@@ -1,0 +1,6 @@
+defaults:
+  - frozen_backbone
+  - data: with_aug
+  - override model: one_class
+
+run_name: one_class_frozen_backbone_with_aug

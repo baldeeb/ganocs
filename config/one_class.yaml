@@ -1,0 +1,14 @@
+defaults:
+  - base
+
+run_name: one_class_old_training
+device: cuda:1
+model:
+  num_classes: 2
+  override_num_classes: True
+
+data:
+  training:
+    dir: ./data/old-habitat-gen/200of100scenes_26selectChairs/train
+    loader:
+      batch_size: 5

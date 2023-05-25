@@ -1,0 +1,7 @@
+defaults:
+  - base
+
+run_name:    frozen_backbone
+
+optimization:
+  parameters: [roi_heads]

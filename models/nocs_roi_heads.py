@@ -41,7 +41,7 @@ class RoIHeadsWithNocs(RoIHeads):
         cache_results:bool  = False,  # retains results at training
         nocs_loss=torch.nn.functional.cross_entropy,  # can be cross entropy or discriminator
         nocs_loss_mode:str  = 'classification',  # regression, classification
-        multiheaded_nocs:bool = False,
+        multiheaded_nocs:bool = True,
         # Others
         **kwargs,
     ):
@@ -194,6 +194,10 @@ class RoIHeadsWithNocs(RoIHeads):
                 # Add NOCS to Loss
                 if self.has_nocs():
                     gt_nocs = [t["nocs"] for t in targets]
+                    if 'multiview_consistency_loss' in self._kwargs:
+                        assert 'pose' in targets[0]
+                        gt_pose = [t["pose"] for t in targets]
+                    else: gt_pose = None
 
                     reduction = 'none' if self.cache_results else 'mean'
                     loss_mask["loss_nocs"] = nocs_loss(gt_labels, gt_nocs, 

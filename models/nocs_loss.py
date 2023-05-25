@@ -129,6 +129,6 @@ def nocs_loss(gt_labels,
                                      mode=mode)
 
     if dispersion_loss is not None:
-        loss += dispersion_loss(proposals) * dispersion_weight
+        loss += dispersion_loss(proposals, targets) * dispersion_weight
 
     return loss

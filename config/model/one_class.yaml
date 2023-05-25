@@ -1,0 +1,6 @@
+defaults:
+  - base  
+
+model:
+  num_classes: 2
+  override_num_classes: True

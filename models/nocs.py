@@ -3,7 +3,7 @@ from models.rcnn_transforms import GeneralizedRCNNTransformWithNocs
 from torchvision.models.detection.mask_rcnn import MaskRCNN
 import torch 
 
-from typing import Any, Optional
+from typing import Any, Optional, Iterator
 from torch import nn
 from torchvision.models.detection.mask_rcnn import MaskRCNN_ResNet50_FPN_Weights
 from torchvision.models.detection.backbone_utils import (_validate_trainable_layers, 
@@ -107,9 +107,6 @@ class NOCS(MaskRCNN):
         )
         self.roi_heads = RoIHeadsWithNocs.from_torchvision_roiheads(
                                                     self.roi_heads,
-                                                    # nocs_num_bins=nocs_bins,
-                                                    # cache_results = cache_results,
-                                                    # nocs_loss=nocs_loss,
                                                     **kwargs)
         
         self.cache = None
@@ -144,6 +141,14 @@ class NOCS(MaskRCNN):
                                             new_size,
                                             original_sizes.long(),)
         return result
+    
+    def parameters(self, recurse: bool = True, keys: list = None) -> Iterator[nn.Parameter]:
+        if keys is None:
+            return super().parameters(recurse)
+
+        for n, p in super().named_parameters():
+            if any([k in n for k in keys]): 
+                yield p
 
 
 def get_nocs_resnet50_fpn(
@@ -151,6 +156,7 @@ def get_nocs_resnet50_fpn(
     maskrcnn_weights: Optional[MaskRCNN_ResNet50_FPN_Weights] = None,
     progress: bool = True,
     num_classes: Optional[int] = None,
+    override_num_classes: bool = False,
     weights_backbone: Optional[ResNet50_Weights] = ResNet50_Weights.IMAGENET1K_V1,
     trainable_backbone_layers: Optional[int] = None,
     **kwargs: Any,
@@ -160,10 +166,20 @@ def get_nocs_resnet50_fpn(
 
     if maskrcnn_weights is not None:
         weights_backbone = None
-        num_classes = _ovewrite_value_param("num_classes", num_classes, 
-                                            len(maskrcnn_weights.meta["categories"]))
+        try:
+            num_classes = _ovewrite_value_param("num_classes", num_classes, 
+                                                len(maskrcnn_weights.meta["categories"]))
+            override_num_classes = False
+            num_classes_override = num_classes
+        except ValueError as e:
+            if not override_num_classes: 
+                raise e
+            else: 
+                num_classes_override = int(num_classes)
+                num_classes = len(maskrcnn_weights.meta["categories"])
     elif num_classes is None:
         num_classes = 91
+        override_num_classes = False
 
     is_trained = maskrcnn_weights is not None or weights_backbone is not None
     trainable_backbone_layers = _validate_trainable_layers(is_trained, trainable_backbone_layers, 5, 3)
@@ -179,4 +195,21 @@ def get_nocs_resnet50_fpn(
         if maskrcnn_weights == MaskRCNN_ResNet50_FPN_Weights.COCO_V1:
             overwrite_eps(model, 0.0)
 
+        if override_num_classes:
+            model.roi_heads.box_predictor.cls_score = nn.Linear(
+                model.roi_heads.box_predictor.cls_score.in_features, num_classes_override
+            )
+            model.roi_heads.box_predictor.num_classes = num_classes_override
+            model.roi_heads.mask_predictor.mask_fcn_logits = nn.Conv2d(
+                model.roi_heads.mask_predictor.mask_fcn_logits.in_channels, num_classes_override, 1, 1, 0
+            )
+
+            binsxcls = model.roi_heads.nocs_heads.num_bins * num_classes_override
+            n = model.roi_heads.nocs_heads.head.x[1][2]
+            in_ch, kernel_s, stride, padding = n.in_channels, n.kernel_size, n.stride, n.padding
+            model.roi_heads.nocs_heads.head.x[1][2] = nn.Conv2d(in_ch, binsxcls, kernel_s, stride, padding)
+            model.roi_heads.nocs_heads.head.y[1][2] = nn.Conv2d(in_ch, binsxcls, kernel_s, stride, padding)
+            model.roi_heads.nocs_heads.head.z[1][2] = nn.Conv2d(in_ch, binsxcls, kernel_s, stride, padding)
+
+            model.roi_heads.nocs_heads.num_classes = num_classes_override
     return model

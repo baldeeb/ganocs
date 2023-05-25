@@ -1,0 +1,15 @@
+defaults:
+  - base
+  
+run_name: old_data
+device: cuda:0
+
+data:
+  training:
+    dir: ./data/old-habitat-gen/200of100scenes_26selectChairs/train
+    loader:
+      batch_size: 5
+  testing:
+    dir: data/old-habitat-gen/200of100scenes_26selectChairs/test
+    loader:
+      batch_size: 5
