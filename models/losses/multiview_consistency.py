@@ -11,32 +11,6 @@ from torch import (stack,
 from numpy import random
 
 
-# def multiview_consistencry_loss(nocs, depth, poses, K, n_pairs=None):
-#     '''
-#     Assuming that the batch samples are close to each other.
-#     Args:
-#         nocs:    (B, 3, N, H, W) where N is the number of bins
-#         depth:   (B, 1,    H, W)
-#         poses:   (B, N, 4, 4)
-#         intrinsic:  (3, 3)
-#     '''
-#     B = nocs.shape[0]
-#     mgrid = stack(meshgrid(arange(B), arange(B)), dim=-1)  # [B, B, 2]
-#     idx_pairs = flatten(mgrid, 0, 1)  # [BxB, 2]
-#     sample_idxs = arange(B*B)
-#     if n_pairs is not None and n_pairs < B*B:
-#         sample_idxs = random.choice(sample_idxs, n_pairs)
-#     loss = []
-#     for si in sample_idxs:
-#         i1, i2 = idx_pairs[si]
-#         if i1 == i2: continue
-#         loss.append(
-#             viewpair_consistency_loss(nocs[i1], depth[i1], poses[i1],
-#                                       nocs[i2], depth[i2], poses[i2], 
-#                                       K[i1]))
-#     return sum(loss) / len(loss)
-
-
 def multiview_consistencry_loss(nocs, targets, n_pairs=None):
     '''
     Assuming that the batch samples are close to each other.
@@ -84,39 +58,45 @@ def viewpair_consistency_loss(nocs1, depth1, pose1, nocs2, depth2, pose2, K):
     # Get transform from 1 to 2
     twoTone = pose2 @ inverse(pose1)
 
-    # Select foreground pixels
+    # Select pixels with nocs map
     ij1  = nonzero(nocs1.sum(dim=(0, 1)))
-    if ij1.shape[0] == 0: return 0
+    if ij1.shape[0] == 0: 
+        return 0
     d1   = depth1[ij1[:, 0], ij1[:, 1]]
     
     # Filter out points with no depth
     valid = nonzero(d1 > 0).squeeze(1)
-    if valid.shape[0] == 0: return 0
+    if valid.shape[0] == 0: 
+        return 0
     ij1, d1  = ij1[valid], d1[valid]
 
     # Project to 3D
-    xyz1 = inverse(K) @ (homogenized(ij1) * d1[:, None]).T 
+    uv1 = ij1[:, [1, 0]]
+    xyz1 = inverse(K) @ (homogenized(uv1) * d1[:, None]).T 
 
     # Transform to second view
     xyz2 = twoTone @ homogenized(xyz1.T).T
 
     # Project to 2D of second view
-    ij2  = (K @ xyz2[:3] / xyz2[2])[:2].T.long()
-   
+    uv2  = (K @ xyz2[:3] / xyz2[2])[:2].T.long()
+    ij2  = uv2[:, [1, 0]]
+
     # Select only in-frame pixels
     in_frame = nonzero((ij2[:, 0] >= 0) * (ij2[:, 1] >= 0) *
                        (ij2[:, 0] < depth2.shape[0]) *
                        (ij2[:, 1] < depth2.shape[1])).squeeze(1)
-    if in_frame.shape[0] == 0: return 0
+    if in_frame.shape[0] == 0: 
+        return 0
     ij1, ij2 = ij1[in_frame], ij2[in_frame]
     xyz2 = xyz2[:, in_frame]
 
     # Select only non-occluded samples
     depth_eps = FloatTensor([0.02]).to(device)
     d2 = depth2[ij2[:, 0], ij2[:, 1]]
-    visible_i = nonzero((xyz2[2] < (d2 - depth_eps)) * 
+    visible_i = nonzero(((xyz2[2] - d2).abs() < depth_eps) * 
                         (d2 > 0)).squeeze(1)
-    if visible_i.shape[0] == 0: return 0
+    if visible_i.shape[0] == 0: 
+        return 0
     ij1, ij2 = ij1[visible_i], ij2[visible_i]
 
     # Compute the distance between associated pixels

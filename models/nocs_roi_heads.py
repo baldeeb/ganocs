@@ -15,6 +15,8 @@ from models.losses.multiview_consistency import multiview_consistencry_loss
 from models.nocs_util import select_nocs_proposals, separate_image_results, paste_in_image
 from models.nocs_heads import NocsHeads
 
+import torchvision.transforms as T
+
 class RoIHeadsWithNocs(RoIHeads):
     def __init__(
         self,
@@ -71,6 +73,7 @@ class RoIHeadsWithNocs(RoIHeads):
         self.ignore_nocs = False
         self.nocs_loss = nocs_loss
         self._kwargs = kwargs
+        self._training_mode = None
             
     def has_nocs(self): 
         if self.ignore_nocs: return False
@@ -243,6 +246,7 @@ class RoIHeadsWithNocs(RoIHeads):
     
 
     def training_mode(self, mode: str=None):
+        assert mode in ['multiview', None], 'unrecognized roi head training mode...'
         self._training_mode = mode
 
     def multiview_consistency_loss(self,
@@ -297,18 +301,67 @@ class RoIHeadsWithNocs(RoIHeads):
                                             self.nocs_heads.num_classes)
         for n, result in zip(nocs_maps, results): result['nocs'] = n
 
+        # for result, target, score in zip(results, targets, scores):
+
+        #     for key in result['nocs'].keys():
+        #         result['nocs'][key] = paste_in_image(result['nocs'][key],
+        #                                         result['boxes'],
+        #                                         target['depth'].shape[-2],
+        #                                         target['depth'].shape[-1],)
+            
+        #     # Filter out low scoring predictions
+        #     valid_preds = score > 0.5
+        #     if len(valid_preds) == 0: 
+        #         result['nocs'] = torch.zeros((1, 3, *target['depth'].shape[-2:]), 
+        #                                      device=score.device) 
+        #         continue
+
+        #     ni = torch.stack(list(result['nocs'].values()), dim=1)
+        #     ni, score = ni[valid_preds], score[valid_preds]
+
+        #     # Get weighted average of the nocs predictions
+        #     result.pop('nocs')
+        #     n_shape = ni.shape
+        #     if n_shape[0] > 1:
+        #         weights = (ni>0).view(n_shape[0], -1)
+        #         weights = weights * score[:, None]
+        #         weights = weights.softmax(1)
+        #         weights = weights.view(n_shape)
+        #         ni = (weights * ni).sum(0, keepdim=True)
+        #     result['nocs'] = ni
+
+        # # Calculate the view consistency loss
+        # nocs = torch.concatenate([r['nocs'] for r in results], dim=0)
+        # # multiview_consistencry_loss(score(n), score(d), score(p), score(k), 100)  
+        # l = multiview_consistencry_loss(nocs, targets, 100)  
+        l = self.get_multiveiw_loss(results, targets, scores)
+        return [], {'multiview_consistency_loss': l}
+    
+
+    def get_multiveiw_loss(self, results, targets, scores):
+
+        ds = 0.5
+
         for result, target, score in zip(results, targets, scores):
 
+            target_shape = [int(s*ds) for s in target['depth'].shape[-2:]]
+            resize = T.Resize(size=target_shape)
+            target['depth'] = resize(target['depth'][None, None])[0, 0]
+            K = target['intrinsics']
+            target['intrinsics'] = torch.tensor([[K[0,0]*ds, 0.0,            K[0,2]*ds],
+                                                [0.0,        K[1,1]*ds,   K[1,2]*ds],
+                                                [0.0,           0.0,         1.0]])
+
             for key in result['nocs'].keys():
-                result['nocs'][key] = paste_in_image(result['nocs'][key],
-                                                result['boxes'],
-                                                target['depth'].shape[-2],
-                                                target['depth'].shape[-1],)
+                result['nocs'][key] = paste_in_image(result['nocs'][key], 
+                                                     result['boxes'],
+                                                     target['depth'].shape[-2],
+                                                     target['depth'].shape[-1],)
             
             # Filter out low scoring predictions
             valid_preds = score > 0.5
             if len(valid_preds) == 0: 
-                result['nocs'] = torch.zeros((1, 3, *target['depth'].shape[-2:]), 
+                result['nocs'] = torch.zeros((1, 3, 32, *target['depth'].shape[-2:]), 
                                              device=score.device) 
                 continue
 
@@ -327,10 +380,10 @@ class RoIHeadsWithNocs(RoIHeads):
             result['nocs'] = ni
 
         # Calculate the view consistency loss
-        nocs = torch.concatenate([r['nocs'] for r in results], dim=0)
+        result['nocs'] = torch.concatenate([r['nocs'] for r in results], dim=0)
         # multiview_consistencry_loss(score(n), score(d), score(p), score(k), 100)  
-        l = multiview_consistencry_loss(nocs, targets, 100)  
-        return [], {'multiview_consistency_loss': l}
+        return multiview_consistencry_loss(result['nocs'], targets, 100)  
+
     
     def _run_keypoint_head(self, result, targets, losses, proposals, matched_idxs, labels, features, image_shapes):
         keypoint_proposals = [p["boxes"] for p in result]
