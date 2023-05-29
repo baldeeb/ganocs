@@ -143,12 +143,9 @@ class NOCS(MaskRCNN):
         return result
     
     def parameters(self, recurse: bool = True, keys: list = None) -> Iterator[nn.Parameter]:
-        if keys is None:
-            return super().parameters(recurse)
-
-        for n, p in super().named_parameters():
-            if any([k in n for k in keys]): 
-                yield p
+        for n, p in super().named_parameters(recurse=recurse):
+            if keys is None: yield p
+            elif any([k in n for k in keys]): yield p
 
 
 def get_nocs_resnet50_fpn(

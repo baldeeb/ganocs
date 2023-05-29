@@ -5,14 +5,13 @@ from torchvision.models.detection.mask_rcnn import MaskRCNN_ResNet50_FPN_Weights
 from habitat_datagen_util.utils.dataset import HabitatDataset
 from habitat_datagen_util.utils.collate_tools import collate_fn
 from torch.utils.data import DataLoader
-# from utils.dataset import collate_fn
 from torch.optim import Adam
-import torch 
-from tqdm import tqdm
-import wandb
-import pathlib as pl
-import os
 from time import time
+from tqdm import tqdm
+import pathlib as pl
+import torch 
+import wandb
+import os
 
 # DATA_DIR = "/home/baldeeb/Code/pytorch-NOCS/data/habitat-generated/00847-bCPU9suPUw9/metadata.json"
 # DATA_DIR = "/home/baldeeb/Code/pytorch-NOCS/data/habitat-generated/200of100scenes_26selectChairs"  # larger dataset

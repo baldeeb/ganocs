@@ -9,8 +9,10 @@ from torchvision.models.detection.roi_heads import (
     maskrcnn_inference,
     keypointrcnn_loss, keypointrcnn_inference,
     )
-from models.nocs_loss import nocs_loss
-from models.nocs_util import select_nocs_proposals, separate_image_results
+# from torchvision.models.detection.transform import paste_masks_in_image
+from models.losses.nocs_loss import nocs_loss
+from models.losses.multiview_consistency import multiview_consistencry_loss
+from models.nocs_util import select_nocs_proposals, separate_image_results, paste_in_image
 from models.nocs_heads import NocsHeads
 
 class RoIHeadsWithNocs(RoIHeads):
@@ -107,7 +109,6 @@ class RoIHeadsWithNocs(RoIHeads):
                 image_shapes : List[Tuple[int, int]],
                 targets      : Optional[List[Dict[str, Tensor]]] = None,
         ):
-        # type: (...) -> Tuple[List[Dict[str, Tensor]], Dict[str, Tensor]]
         """
         Args:
             features (List[Tensor]): features produced by the backbone 
@@ -115,6 +116,9 @@ class RoIHeadsWithNocs(RoIHeads):
             image_shapes (List[Tuple[H, W]]): the sizes of each image in the batch.
             targets (List[Dict]): 
         """
+        if self._training_mode == 'multiview':
+            return self.multiview_consistency_loss(features, proposals, image_shapes, targets)
+        
         if targets is not None: self._check_target_contents(targets)
 
         if self.training:
@@ -130,6 +134,7 @@ class RoIHeadsWithNocs(RoIHeads):
 
         result: List[Dict[str, torch.Tensor]] = []
         losses = {}
+
         if self.training:
             if labels is None: raise ValueError("labels cannot be None")
             if regression_targets is None: raise ValueError("regression_targets cannot be None")
@@ -169,16 +174,13 @@ class RoIHeadsWithNocs(RoIHeads):
                 proposed_box_regions = [p["boxes"] for p in result]
                 pos_matched_idxs = None
 
-            if self.mask_roi_pool is not None:
-                mask_features = self.mask_roi_pool(features, proposed_box_regions, image_shapes)
+            mask_features = self.mask_roi_pool(features, proposed_box_regions, image_shapes)
 
-                if self.has_nocs():
-                    nocs_proposals = self.nocs_heads(mask_features)
+            if self.has_nocs():
+                nocs_proposals = self.nocs_heads(mask_features)
 
-                mask_features = self.mask_head(mask_features)
-                mask_logits = self.mask_predictor(mask_features)
-            else:
-                raise Exception("Expected mask_roi_pool to be not None")
+            mask_features = self.mask_head(mask_features)
+            mask_logits = self.mask_predictor(mask_features)
 
             loss_mask = {}
             if self.training:
@@ -194,10 +196,6 @@ class RoIHeadsWithNocs(RoIHeads):
                 # Add NOCS to Loss
                 if self.has_nocs():
                     gt_nocs = [t["nocs"] for t in targets]
-                    if 'multiview_consistency_loss' in self._kwargs:
-                        assert 'pose' in targets[0]
-                        gt_pose = [t["pose"] for t in targets]
-                    else: gt_pose = None
 
                     reduction = 'none' if self.cache_results else 'mean'
                     loss_mask["loss_nocs"] = nocs_loss(gt_labels, gt_nocs, 
@@ -208,6 +206,7 @@ class RoIHeadsWithNocs(RoIHeads):
                                                        loss_fx=self.nocs_loss,
                                                        mode=self.nocs_loss_mode,
                                                        **self._kwargs)
+                    
                     if self.cache_results:
                         split_loss = separate_image_results(loss_mask['loss_nocs'], labels)
                         split_nocs = separate_image_results(nocs_proposals, labels)
@@ -216,7 +215,6 @@ class RoIHeadsWithNocs(RoIHeads):
                                                  for k, v in split_nocs.items()}
                             obj_loss = split_loss[i].mean((1,2,3))
                             result[i]['loss_nocs'] = self._properly_allocate(obj_loss)
-
                         loss_mask["loss_nocs"] = torch.mean(loss_mask["loss_nocs"])
 
             else:
@@ -244,6 +242,96 @@ class RoIHeadsWithNocs(RoIHeads):
         return result, losses
     
 
+    def training_mode(self, mode: str=None):
+        self._training_mode = mode
+
+    def multiview_consistency_loss(self,
+                features     : Dict[str, Tensor],
+                proposals    : List[Tensor],
+                image_shapes : List[Tuple[int, int]],
+                targets      : List[Dict[str, Tensor]],):
+        """
+        Args:
+            features (List[Tensor]): features produced by the backbone 
+            proposals (List[Tensor[N, 4]]): list of boxes regions.
+            image_shapes (List[Tuple[H, W]]): the sizes of each image in the batch.
+            depths (List[Tensor[N, H, W]]): list of depth maps.
+            poses (List[Tensor[N, 4, 4]]): list of camera poses. Those are expected to be relative
+                to a global reference frame.
+        """
+        assert self.has_mask() and self.has_nocs(), 'This function currently requires a mask head'
+        results: List[Dict[str, torch.Tensor]] = []
+        losses = {}
+        # image_shapes = [(int(h/2), int(w/2)) for (h, w) in image_shapes]
+
+        box_features = self.box_roi_pool(features, proposals, image_shapes)
+        box_features = self.box_head(box_features)
+        class_logits, box_regression = self.box_predictor(box_features)
+
+        boxes, scores, labels = self.postprocess_detections(class_logits, 
+                                                            box_regression, 
+                                                            proposals, 
+                                                            image_shapes)
+        for i in range(len(boxes)):
+            results.append(
+                {"boxes":boxes[i], "labels":labels[i], "scores":scores[i]}
+            )
+
+        proposed_box_regions = []
+        for img_id in range(len(proposals)):
+            pos = torch.where(labels[img_id] > 0)[0]
+            proposed_box_regions.append(proposals[img_id][pos])
+
+        mask_features = self.mask_roi_pool(features, proposed_box_regions, image_shapes)
+
+        mask_head_features = self.mask_head(mask_features)
+        mask_logits = self.mask_predictor(mask_head_features)
+        labels = [r["labels"] for r in results]
+        masks_probs = maskrcnn_inference(mask_logits, labels)
+        for mask_prob, result in zip(masks_probs, results):
+            result["masks"] = mask_prob
+        
+        # Add NOCS to results
+        nocs_proposals = self.nocs_heads(mask_features)
+        nocs_maps = select_nocs_proposals(nocs_proposals, labels, 
+                                            self.nocs_heads.num_classes)
+        for n, result in zip(nocs_maps, results): result['nocs'] = n
+
+        for result, target, score in zip(results, targets, scores):
+
+            for key in result['nocs'].keys():
+                result['nocs'][key] = paste_in_image(result['nocs'][key],
+                                                result['boxes'],
+                                                target['depth'].shape[-2],
+                                                target['depth'].shape[-1],)
+            
+            # Filter out low scoring predictions
+            valid_preds = score > 0.5
+            if len(valid_preds) == 0: 
+                result['nocs'] = torch.zeros((1, 3, *target['depth'].shape[-2:]), 
+                                             device=score.device) 
+                continue
+
+            ni = torch.stack(list(result['nocs'].values()), dim=1)
+            ni, score = ni[valid_preds], score[valid_preds]
+
+            # Get weighted average of the nocs predictions
+            result.pop('nocs')
+            n_shape = ni.shape
+            if n_shape[0] > 1:
+                weights = (ni>0).view(n_shape[0], -1)
+                weights = weights * score[:, None]
+                weights = weights.softmax(1)
+                weights = weights.view(n_shape)
+                ni = (weights * ni).sum(0, keepdim=True)
+            result['nocs'] = ni
+
+        # Calculate the view consistency loss
+        nocs = torch.concatenate([r['nocs'] for r in results], dim=0)
+        # multiview_consistencry_loss(score(n), score(d), score(p), score(k), 100)  
+        l = multiview_consistencry_loss(nocs, targets, 100)  
+        return [], {'multiview_consistency_loss': l}
+    
     def _run_keypoint_head(self, result, targets, losses, proposals, matched_idxs, labels, features, image_shapes):
         keypoint_proposals = [p["boxes"] for p in result]
         if self.training:

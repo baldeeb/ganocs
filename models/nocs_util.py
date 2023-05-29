@@ -81,3 +81,50 @@ def select_nocs_proposals(nocs_proposals, labels, num_classes):
                                                     labels)
     return [{k:v[i] for k,v in nocs_proposals.items()} 
             for i in range(len(labels))]
+
+
+import torch.nn.functional as F
+import torch
+
+def paste_in_image(data, box, im_h, im_w):
+    '''
+    If given no batch of zero entries, this function will return an 
+    image of zeros
+    
+    Args:
+        data (torch.Tensor): of shape [B, C, H, W]
+        box (torch.Tensor): of shape [B, 4] where the 4 values of 
+            boxes' the min and max corner points.
+        im_h (int): height of the image
+        im_w (int): width of the image
+        '''
+    B, C = data.shape[0:2]
+
+    if B == 0: # No detections -> return zeros
+        return torch.zeros((3, im_h, im_w), 
+                           dtype=data.dtype, 
+                           device=data.device)
+
+    # type: (Tensor, Tensor, int, int) -> Tensor
+    w = (box[:, 2] - box[:, 0] + 1).long().clamp(1)
+    h = (box[:, 3] - box[:, 1] + 1).long().clamp(1)
+
+    # Resize mask
+    resized = [F.interpolate(data[i:i+1], size=(h[i], w[i]), 
+                             mode="bilinear", align_corners=False)
+               for i in range(B)]
+    
+    images = torch.zeros((B, C, im_h, im_w),
+                          dtype=resized[0].dtype,
+                          device=resized[0].device)
+    x0 = box[:, 0].clamp(min=0, max=im_w).long()
+    x1 = (box[:, 2] + 1).clamp(min=1, max=im_w).long()
+    y0 = box[:, 1].clamp(min=0, max=im_h).long()
+    y1 = (box[:, 3] + 1).clamp(min=1, max=im_h).long()
+
+    for i, r in enumerate(resized):
+        dy = min(y1[i]-y0[i], h[i]) 
+        dx = min(x1[i]-x0[i], w[i])
+        images[i:i+1, :, y0[i]:y0[i]+dy, x0[i]:x0[i]+dx] = r[:, :, 0:dy, 0:dx]
+    
+    return images
