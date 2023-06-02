@@ -1,0 +1,6 @@
+defaults:
+  - base
+  - override data: multiview
+
+run_name:     multiview_consistency_experiment
+multiview_consistency_loss_weight: 0.5

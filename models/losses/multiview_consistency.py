@@ -6,7 +6,7 @@ from torch import (stack,
 from numpy import random
 
 
-def multiview_consistency_loss(results, targets, scores, image_shapes, n_pairs=100, debugging=False):
+def multiview_consistency_loss(results, targets, scores, image_shapes, n_pairs=100, debugging=True):
     from utils.detection import NocsDetection
     detections = []
     for result, target, score, shape in zip(results, targets, scores, image_shapes):

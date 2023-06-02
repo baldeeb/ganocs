@@ -1,0 +1,25 @@
+defaults:
+  - base
+
+training:
+  loader:
+    batch_size: 4
+
+multiview_consistency_data:
+  dataset:
+    _target_: datasets.rosbag_dataset.RosbagReader
+    path: /media/baldeeb/ssd2/Data/kinect/images_poses_camerainfo.bag
+    topics_and_names: # {topic_name: output_name}
+      /rtabmap/rtabmap/localization_pose: pose
+      /k4a/depth_to_rgb/camera_info: intrinsics
+      /k4a/depth_to_rgb/image_raw: depth
+      /k4a/rgb/image_raw: color
+  collate_fn: 
+    _target_: datasets.rosbag_dataset.CollateFunctor
+  loader:
+    _target_: torch.utils.data.DataLoader
+    batch_size: 4
+    shuffle: False
+    
+
+

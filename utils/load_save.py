@@ -3,7 +3,7 @@ import os
 import torch
 from models.nocs import get_nocs_resnet50_fpn
 
-def save_nocs(model, path):
+def save_model(model, path):
     path = pl.Path(path)
     if not path.parent.exists():
         os.makedirs(path.parent)

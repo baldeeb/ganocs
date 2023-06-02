@@ -72,11 +72,12 @@ class RosbagReader:
     Takes a ros bag and returns one item at a time.
     Assumes that the bag topics are logged in a normally distributed fashion. 
     ''' 
-    def __init__(self, path, topics=None, topic_name_map=None):
+    def __init__(self, path, topics_and_names=None):
         self.bag = rosbag.Bag(path)
 
-        if topics is not None:
+        if topics_and_names is not None:
             available_topics = self.get_topics()
+            topics = list(topics_and_names.keys())
             assert all([t in available_topics for t in topics]), "Some topics are not available in the bag."
             self._topics = topics
         else:
@@ -95,8 +96,8 @@ class RosbagReader:
         }
 
         # The output will use these names for topics 
-        if topic_name_map is not None:
-            self._name_of_topic = topic_name_map
+        if topics_and_names is not None:
+            self._name_of_topic = topics_and_names
         for t in self._topics:
             if t not in self._name_of_topic:
                 self._name_of_topic[t] = t
@@ -175,6 +176,11 @@ def collate_fn(batch):
 
     return rgb, batch
 
+class CollateFunctor:
+    def __init__(self):
+        self.collate_fn = collate_fn
+    def __call__(self, batch):
+        return self.collate_fn(batch)
 
 
 if __name__ == '__main__':
