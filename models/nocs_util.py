@@ -98,6 +98,9 @@ def paste_in_image(data, box, im_h, im_w):
         im_h (int): height of the image
         im_w (int): width of the image
         '''
+    assert data.shape[0] == box.shape[0], \
+        f'Unequal number of boxes and data samples are give.'
+    
     B, C = data.shape[0:2]
 
     if B == 0: # No detections -> return zeros
