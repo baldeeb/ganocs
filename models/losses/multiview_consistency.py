@@ -5,7 +5,7 @@ from torch import (stack,
                    flatten,
                    randperm)
 from numpy import random
-from utils.detection import NocsDetection
+from utils.nocs_detection_wrapper import NocsDetection
 import cv2  # For debugging
 
 def _sample_n_pairs(n, B):
