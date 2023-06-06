@@ -21,6 +21,7 @@ def _ros_camera_info_to_np_intrinsic(info:CameraInfo):
         [info.K[6], info.K[7], info.K[8]]
     ])
 
+
 def _ros_image_to_np(image:Image, depth_to_meters=1e-3):
     H, W = image.height, image.width
     if image.encoding == 'rgb8':
@@ -50,11 +51,7 @@ def _ros_pose_to_np_se3_matrix(pose:PoseWithCovarianceStamped):
     q = pose.pose.pose.orientation
     q = quaternion(q.w, q.x, q.y, q.z)
     mat[:3,:3] = as_rotation_matrix(q)
-    # mat[:3,:3] = np.array([
-    #     [1 - 2*q.y**2 - 2*q.z**2, 2*q.x*q.y - 2*q.z*q.w, 2*q.x*q.z + 2*q.y*q.w],
-    #     [2*q.x*q.y + 2*q.z*q.w, 1 - 2*q.x**2 - 2*q.z**2, 2*q.y*q.z - 2*q.x*q.w],
-    #     [2*q.x*q.z - 2*q.y*q.w, 2*q.y*q.z + 2*q.x*q.w, 1 - 2*q.x**2 - 2*q.y**2]
-    # ])
+
     # translation
     mat[:3,3] = np.array([
         pose.pose.pose.position.x,

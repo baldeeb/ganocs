@@ -24,8 +24,7 @@ class NocsDetector:
                  return_annotated_image=False,
                  perform_alignment=True,
                  **kwargs):
-        self._default_config.update(kwargs)
-        kwargs = self._default_config
+        kwargs.update(self._default_config)
         self._device = kwargs['device'] if 'device' in kwargs \
             else torch.device('cuda' if torch.cuda.is_available() else 'cpu')
         self.model = load_nocs(checkpoint, **kwargs)
@@ -68,6 +67,7 @@ class NocsDetector:
             results[i]['transforms'], results[i]['scales'] = [], []
             
             if self._align:
+                annotated_img = self._to_ndarr(images[i].permute(1,2,0))
                 for m, n in zip(r['masks'], r['nocs']):
                     Ts, Ss, _ = align(self._to_ndarr(m) > 0.5, 
                                     self._to_ndarr(n), 
@@ -76,13 +76,11 @@ class NocsDetector:
                     results[i]['scales'].append(Ss)
         
                     if self._draw_box:
-                        annotated_img = self._to_ndarr(images[i].permute(1,2,0))
-                        for t, s, in zip(Ts, Ss):
-                            annotated_img = draw_3d_boxes(annotated_img, 
-                                                        self._to_ndarr(t), 
-                                                        self._to_ndarr(s), 
-                                                        self._K)
-                        results[i]['annotated_image'] = annotated_img
+                        annotated_img = draw_3d_boxes(annotated_img, 
+                                                    self._to_ndarr(Ts[0]), 
+                                                    self._to_ndarr(Ss[0]), 
+                                                    self._K)
+                results[i]['annotated_image'] = annotated_img
 
         return results
             

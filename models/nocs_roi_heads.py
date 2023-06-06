@@ -249,7 +249,6 @@ class RoIHeadsWithNocs(RoIHeads):
         assert mode in ['normal', 'multiview', None], 'unrecognized roi head training mode...'
         self._training_mode = mode
 
-
     def multiview_consistency(self,
                 features     : Dict[str, Tensor],
                 proposals    : List[Tensor],

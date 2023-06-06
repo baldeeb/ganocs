@@ -68,9 +68,12 @@ def align_sample(mask:np.ndarray, coord:np.ndarray,
                  depth:np.ndarray, intrinsic:np.ndarray, 
                  if_norm=False, with_scale=True):
     abs_coord_pts = np.abs(coord[:, mask==1] - 0.5)
+    if abs_coord_pts.shape[1] == 0: raise RuntimeWarning('Could not align object.')
     bbox_scale = 2 * np.amax(abs_coord_pts, axis=1)
     pts, idxs = backproject(depth, intrinsic, mask)
     coord_pts = coord[:, idxs[0], idxs[1]] - 0.5
+
+    if coord_pts.shape[1] == 0: raise RuntimeWarning('Could not align object.')
 
     if if_norm:
         scale = np.linalg.norm(bbox_scale)

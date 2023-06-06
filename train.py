@@ -28,15 +28,6 @@ def run(cfg: DictConfig) -> None:
         collate_fn = hydra.utils.instantiate(cfg.data.testing.loader.pop('collate_fn'))
     testing_dataloader = DataLoader(test_data, **cfg.data.testing.loader, collate_fn=collate_fn)
 
-    if 'multiview_consistency_data' in cfg.data:
-        mvc_cfg = cfg.data.multiview_consistency_data
-        mvc_dataset = hydra.utils.instantiate(mvc_cfg.dataset)
-        mvc_collate_fn = hydra.utils.instantiate(mvc_cfg.collate_fn)
-        multiview_consistency_data = hydra.utils.instantiate(mvc_cfg.loader, 
-                                                            collate_fn=mvc_collate_fn,
-                                                            dataset=mvc_dataset)
-    else: multiview_consistency_data = None
-
     # Model
     model = hydra.utils.instantiate(cfg.model)
     if cfg.model.load:
@@ -44,11 +35,24 @@ def run(cfg: DictConfig) -> None:
         print(f'Loaded {cfg.model.load}')
     model.to(cfg.device).train()
 
+    # (Optional) Multiview consistency loss
+    if 'multiview_consistency_data' in cfg.data:
+        mvc_cfg = cfg.data.multiview_consistency_data
+        mvc_dataset = hydra.utils.instantiate(mvc_cfg.dataset)
+        mvc_collate_fn = hydra.utils.instantiate(mvc_cfg.collate_fn)
+        mvc_dataloader = hydra.utils.instantiate(mvc_cfg.loader, 
+                                                 collate_fn=mvc_collate_fn,
+                                                 dataset=mvc_dataset)
+        multiview_loss = MultiviewLossFunctor(mvc_dataloader,
+                                              model,
+                                              cfg.multiview_consistency_loss_weight,
+                                              cfg.device)
+    else: multiview_loss = lambda: {}
+
     # Optimizer
     optim_cfg = cfg.optimization
     parameters = model.parameters(keys=optim_cfg.parameters)
-    optimizer = hydra.utils.instantiate(optim_cfg.optimizer, 
-                                        params=parameters)
+    optimizer = hydra.utils.instantiate(optim_cfg.optimizer, params=parameters)
 
     # Logger
     wandb.init(project=cfg.project_name, 
@@ -63,44 +67,61 @@ def run(cfg: DictConfig) -> None:
         for batch_i, (images, targets) in enumerate(training_dataloader):
             images = images.to(cfg.device)
             targets = targets2device(targets, cfg.device)
-            losses = model(images, targets)
-            if multiview_consistency_data is not None:
-                mv_loss = multiview_loss(multiview_consistency_data, 
-                                         model,
-                                         cfg.multiview_consistency_loss_weight,
-                                         cfg.device) 
-                losses.update(mv_loss)
-            loss = sum(losses.values())
+            losses = model(images, targets)                 # Forward pass
+            losses.update(multiview_loss())                 # Add multiview loss
+            loss = sum(losses.values())                     # Sum losses
             optimizer.zero_grad()
-            loss.backward()
+            loss.backward()                                 # Backward pass
             optimizer.step()
             wandb.log(losses)
             wandb.log({'loss': loss})
-            if batch_i % cfg.batches_before_eval == 0:
+            if batch_i % cfg.batches_before_eval == 0:      # Eval
                 eval(model, testing_dataloader, cfg.device, 
                      test_data.intrinsic(), cfg.data.testing.batches) 
         save_model(model, pl.Path(cfg.checkpoint_dir)/f'{cfg.run_name}_{epoch}.pth')
         wandb.log({'epoch': epoch})
 
 
-def multiview_loss(dataloader, model, weight, device):
+class MultiviewLossFunctor:
 
-    def targets2device(targets, device):
-        for i in range(len(targets)): 
-            for k in ['masks', 'labels', 'boxes']: 
-                targets[i][k] = targets[i][k].to(device)
-        return targets
+    def __init__(self, 
+                 dataloader:DataLoader, 
+                 model:torch.nn.Module, 
+                 weight:float, 
+                 device:str):
+        self.dataloader = dataloader
+        self.data_iter = self.dataloader.__iter__()
+        self.model = model
+        self.weight = weight
+        self.device = device
 
-    init_training_mode = model.roi_heads._training_mode
-    model.roi_heads.training_mode('multiview')
-    loss = []
-    for images, targets in dataloader:
-        images = images.to(device)
-        targets = targets2device(targets, device)
-        losses = model(images, targets)
-        loss.append(sum(losses.values()))
-    model.roi_heads.training_mode(init_training_mode)
-    return {'multiview': ( sum(loss) / len(loss) ) * weight }
+    def _get_data(self):
+        try:
+            return next(self.data_iter)
+        except StopIteration:
+            print('WARNING: Multiview dataloader ran out of data. Resetting.')
+            self.data_iter = self.dataloader.__iter__()
+            return next(self.data_iter)
+
+    @staticmethod
+    def _targets2device(targets, device):
+            for i in range(len(targets)): 
+                for k in ['masks', 'labels', 'boxes']: 
+                    targets[i][k] = targets[i][k].to(device)
+            return targets
+    
+    def __call__(self):
+        init_training_mode = self.model.roi_heads._training_mode
+        self.model.roi_heads.training_mode('multiview')
+        images, targets = self._get_data()
+        images = images.to(self.device)
+        targets = self._targets2device(targets, self.device)
+        losses = self.model(images, targets)
+        self.model.roi_heads.training_mode(init_training_mode)
+        l = (sum(losses.values()) / len(losses)) * self.weight
+        return {'multiview': l}
+
+
 
 if __name__ == '__main__':
     run()

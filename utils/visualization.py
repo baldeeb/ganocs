@@ -30,6 +30,7 @@ def calculate_2d_projections(coordinates_3d, intrinsics):
 
 def draw(img, imgpts, axes, color):
     imgpts = np.int32(imgpts).reshape(-1, 2)
+    img = img.copy()
 
     # draw ground layer in darker color
     color_ground = (int(color[0] * 0.3), int(color[1] * 0.3), int(color[2] * 0.3))

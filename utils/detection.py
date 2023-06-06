@@ -35,6 +35,7 @@ class NocsDetection:
         self.pose = pose.to(self.device) if pose is not None else None
         self.occludsion_eps = FloatTensor([0.02]).to(self.device)
         self.shape = img_shape
+        self.box_mask = self.mask_of_nocs_boxes()
 
         dshape = depth.shape[-2:]
         resize = T.Resize(size=img_shape)
@@ -45,6 +46,16 @@ class NocsDetection:
         self.K[1] *= img_shape[1] / dshape[1]
         self.K = self.K.to(self.device).float()
 
+
+    def mask_of_nocs_boxes(self):
+        ''' Returns a mask of shape [H, W] where each pixel is 1 if
+        the pixel is in any of the boxes, and 0 otherwise.
+        '''
+        H, W = self.shape
+        mask = zeros(H, W).bool().to(self.device)
+        for box in self.box:
+            mask[int(box[1]):int(box[3]), int(box[0]):int(box[2])] = True
+        return mask
 
     @staticmethod 
     def nocs_in_box(pred, box):
@@ -64,14 +75,8 @@ class NocsDetection:
         mask = ones(H, W).bool().to(self.depth.device)
         for k in self.pred.keys():
             m = paste_in_image(self.pred[k], self.box, H, W)
-            # import matplotlib.pyplot as plt
-            # plt.imshow(m[0].clone().detach().cpu().numpy().sum(0))
-            # plt.show()
             m = m.sum((0,1)) != 0
             mask = mask * m.to(mask)
-        # for n, b in zip(self.nocs, self.box):
-            # m = paste_in_image(n, b, H, W).sum(0, 1) > 0
-            # masks.append(m)
         return mask
 
 
@@ -83,7 +88,8 @@ class NocsDetection:
             ij: (N, 2)
         '''
         # nocs_mask  = self.nocs.sum(dim=(0, 1))>0
-        nocs_mask  = self.mask_of_nocs_preds()
+        # nocs_mask  = self.mask_of_nocs_preds()
+        nocs_mask  = self.box_mask
         depth_mask = self.depth > 0
         mask = nocs_mask * depth_mask 
         has_data = mask[ij[:, 0], ij[:, 1]]
@@ -111,8 +117,8 @@ class NocsDetection:
             "Poses must be set before calling get_associations_with"
 
         H, W = self.depth.shape[-2:]
-        ij = flatten(stack(meshgrid(arange(H), arange(W)), dim=-1), 0, 1)
-        ij = ij.to(self.device)
+        ah, aw = arange(H, device=self.device), arange(W, device=self.device)
+        ij = flatten(stack(meshgrid(ah, aw), dim=-1), 0, 1)
 
         # Select those with valid data
         of_valid_data = self.have_valid_data(ij)
