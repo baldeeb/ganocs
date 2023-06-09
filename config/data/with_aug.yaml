@@ -1,9 +1,10 @@
-data:
-  training:
-    loader:
-      collate_fn:
-        _target_: habitat_datagen_util.utils.collate_tools.TransformImagesAndCollate
-  testing:
-    loader:
-      collate_fn:
-        _target_: habitat_datagen_util.utils.collate_tools.TransformImagesAndCollate
+defaults:
+  - base
+  - _self_
+  
+training:
+  collate_fn:
+    _target_: habitat_datagen_util.utils.collate_tools.TransformImagesAndCollate
+testing:
+  collate_fn:
+    _target_: habitat_datagen_util.utils.collate_tools.TransformImagesAndCollate

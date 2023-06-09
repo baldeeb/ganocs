@@ -2,10 +2,14 @@ defaults:
   - model: base
   - data: base
   - optimization: base
+  - _self_
 
-project_name: torch-nocs-classification
+project_name: nocs_with_multiview_consistency
 run_name:     basic
 num_epochs: 5
 batches_before_eval: 5
 checkpoint_dir: ./checkpoints/nocs_classification/${now:%Y-%m-%d_%H-%M-%S}
 device: cuda:0
+log: true
+
+num_eval_batches: 10

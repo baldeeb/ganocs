@@ -1,7 +1,5 @@
 defaults:
   - base
-
+  - override optimization: frozen_backbone
 run_name:    frozen_backbone
 
-optimization:
-  parameters: [roi_heads]

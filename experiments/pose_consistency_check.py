@@ -42,7 +42,7 @@ def run():
     else:
         from datasets.rosbag_dataset import RosbagReader, collate_fn
         bag_path = '/media/baldeeb/ssd2/Data/kinect/images_poses_camerainfo.bag'
-        topic_names = {'/rtabmap/rtabmap/localization_pose': 'pose',
+        topic_names = {'/rtabmap/rtabmap/localization_pose': 'camera_pose',
                '/k4a/depth_to_rgb/camera_info': 'intrinsics',
                '/k4a/depth_to_rgb/image_raw': 'depth',
                '/k4a/rgb/image_raw': 'color',}

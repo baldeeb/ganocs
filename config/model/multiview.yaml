@@ -1,0 +1,7 @@
+defaults:
+  - one_class
+  - _self_
+
+multiview:
+  loss_weight: 1.0
+  loss_mode: 'alignment' # 'alignment' or 'alignment'

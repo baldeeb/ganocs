@@ -28,9 +28,11 @@ def calculate_2d_projections(coordinates_3d, intrinsics):
     return projected_coordinates
 
 
-def draw(img, imgpts, axes, color):
+def draw(img:np.ndarray, imgpts, axes, color):
     imgpts = np.int32(imgpts).reshape(-1, 2)
     img = img.copy()
+    if img.dtype in [np.float32, np.float, np.float64]:
+        img = (img * 255).astype(np.uint8)
 
     # draw ground layer in darker color
     color_ground = (int(color[0] * 0.3), int(color[1] * 0.3), int(color[2] * 0.3))

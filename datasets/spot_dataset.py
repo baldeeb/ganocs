@@ -34,7 +34,7 @@ class SpotDataset:
         return {
             'color':      torch.tensor(color.astype(np.float32))/255,
             'depth':      torch.tensor(depth.astype(np.float32))/1000,
-            'pose':  torch.tensor(transform, dtype=torch.float32),
+            'camera_pose':  torch.tensor(transform, dtype=torch.float32),
             'intrinsics': self.intrinsic(),
         }
 

@@ -201,12 +201,12 @@ def get_nocs_resnet50_fpn(
                 model.roi_heads.mask_predictor.mask_fcn_logits.in_channels, num_classes_override, 1, 1, 0
             )
 
-            binsxcls = model.roi_heads.nocs_heads.num_bins * num_classes_override
-            n = model.roi_heads.nocs_heads.head.x[1][2]
-            in_ch, kernel_s, stride, padding = n.in_channels, n.kernel_size, n.stride, n.padding
-            model.roi_heads.nocs_heads.head.x[1][2] = nn.Conv2d(in_ch, binsxcls, kernel_s, stride, padding)
-            model.roi_heads.nocs_heads.head.y[1][2] = nn.Conv2d(in_ch, binsxcls, kernel_s, stride, padding)
-            model.roi_heads.nocs_heads.head.z[1][2] = nn.Conv2d(in_ch, binsxcls, kernel_s, stride, padding)
-
-            model.roi_heads.nocs_heads.num_classes = num_classes_override
+            model.roi_heads = RoIHeadsWithNocs.from_torchvision_roiheads(model.roi_heads, **kwargs)
+            # binsxcls = model.roi_heads.nocs_heads.num_bins * num_classes_override
+            # n = model.roi_heads.nocs_heads.head.x[1][2]
+            # in_ch, kernel_s, stride, padding = n.in_channels, n.kernel_size, n.stride, n.padding
+            # model.roi_heads.nocs_heads.head.x[1][2] = nn.Conv2d(in_ch, binsxcls, kernel_s, stride, padding)
+            # model.roi_heads.nocs_heads.head.y[1][2] = nn.Conv2d(in_ch, binsxcls, kernel_s, stride, padding)
+            # model.roi_heads.nocs_heads.head.z[1][2] = nn.Conv2d(in_ch, binsxcls, kernel_s, stride, padding)
+            # model.roi_heads.nocs_heads.num_classes = num_classes_override
     return model

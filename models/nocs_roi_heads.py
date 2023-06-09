@@ -74,6 +74,7 @@ class RoIHeadsWithNocs(RoIHeads):
         self.nocs_loss = nocs_loss
         self._kwargs = kwargs
         self._training_mode = None
+        self._multiview_loss_mode = None
             
     def has_nocs(self): 
         if self.ignore_nocs: return False
@@ -297,7 +298,8 @@ class RoIHeadsWithNocs(RoIHeads):
         return [], {'multiview_consistency_loss': multiview_consistency_loss(results, 
                                                                              targets, 
                                                                              scores, 
-                                                                             image_shapes)}
+                                                                             image_shapes,
+                                                                             mode=self._multiview_loss_mode)}
 
     def _run_keypoint_head(self, result, targets, losses, proposals, matched_idxs, labels, features, image_shapes):
         keypoint_proposals = [p["boxes"] for p in result]

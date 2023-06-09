@@ -1,0 +1,9 @@
+defaults:
+  - base
+  - _self_
+  
+optimization:
+  parameters:
+    - roi_heads.mask_predictor
+    - roi_heads.box_predictor
+    - roi_heads.nocs_heads

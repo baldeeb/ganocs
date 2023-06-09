@@ -9,12 +9,14 @@ from torch import (stack,
                    ones,
                    ones_like, 
                    flatten,
+                   where, 
                    FloatTensor)
 from models.nocs_util import paste_in_image
 from torchvision import transforms as T
-
+from utils.misc import get_ijs
+from utils.byoc_utils.alignment import test_align
 class NocsDetection:
-    def __init__(self, nocs_pred, box, score, depth, intrinsics, img_shape, pose=None):
+    def __init__(self, nocs_pred, boxs, scores, masks, labels, depth, intrinsics, img_shape, camera_pose=None):
         '''
         Houses a single detection.
         Args:
@@ -26,25 +28,40 @@ class NocsDetection:
             img_shape (torch.Tensor): of shape [2] (H, W) assues all detections are from same shaped images
             '''
         assert len(img_shape) == 2, 'This class always assumes the source are images of the same shape.'
-        assert len(score) > 0, 'Empty detections are not allowed.'
-        self.device = box.device
-        self.pred = nocs_pred
-        self.nocs = NocsDetection.nocs_in_box(nocs_pred, box) # list(Num_dets x [Channels, Bins, H, W]])
-        self.box = box.to(self.device)
-        self.score = score.to(self.device)
-        self.pose = pose.to(self.device) if pose is not None else None
-        self.occludsion_eps = FloatTensor([0.02]).to(self.device)
+        assert len(scores) > 0, 'Empty detections are not allowed.'
+        
         self.shape = img_shape
+        self.device = boxs.device
+        
+        self.preds = nocs_pred
+        self.nocs = NocsDetection.nocs_in_box(nocs_pred, boxs) # list(Num_dets x [Channels, Bins, H, W]])
+        self.boxs = boxs.to(self.device)
+        self.scores = scores.to(self.device)
+        self.camera_pose = camera_pose.to(self.device) if camera_pose is not None else None
+        self.masks = masks.to(self.device)
+        self.labels = labels.to(self.device)
+        self.occludsion_eps = FloatTensor([0.02]).to(self.device)
         self.box_mask = self.mask_of_nocs_boxes()
 
-        dshape = depth.shape[-2:]
         resize = T.Resize(size=img_shape)
         self.depth = resize(depth[None])[0].to(self.device)
 
         self.K = intrinsics
+        dshape = depth.shape[-2:]
         self.K[0] *= img_shape[0] / dshape[0]
         self.K[1] *= img_shape[1] / dshape[1]
         self.K = self.K.to(self.device).float()
+
+    def __len__(self):
+        return len(self.scores)
+
+    def masks_in_image(self, idxs=None, threshold=0.5):
+        if idxs is not None:
+            m, b = self.masks[[idxs]], self.boxs[[idxs]]  
+        else: 
+            m, b = self.masks, self.boxs
+        masks_im = paste_in_image(m, b, self.shape[0], self.shape[1])
+        return masks_im.sum(0) > threshold
 
 
     def mask_of_nocs_boxes(self):
@@ -53,9 +70,10 @@ class NocsDetection:
         '''
         H, W = self.shape
         mask = zeros(H, W).bool().to(self.device)
-        for box in self.box:
+        for box in self.boxs:
             mask[int(box[1]):int(box[3]), int(box[0]):int(box[2])] = True
         return mask
+
 
     @staticmethod 
     def nocs_in_box(pred, box):
@@ -70,14 +88,15 @@ class NocsDetection:
                 for i in range(len(nocs))]
     
 
-    def mask_of_nocs_preds(self):
-        H, W = self.shape
-        mask = ones(H, W).bool().to(self.depth.device)
-        for k in self.pred.keys():
-            m = paste_in_image(self.pred[k], self.box, H, W)
-            m = m.sum((0,1)) != 0
-            mask = mask * m.to(mask)
-        return mask
+    # def mask_of_nocs_preds(self):
+    #  # Seemed lie a less efficient mask_of_nocs_boxes
+    #     H, W = self.shape
+    #     mask = ones(H, W, device=self.device).bool()
+    #     for k in self.pred.keys():
+    #         m = paste_in_image(self.pred[k], self.box, H, W)
+    #         m = m.sum((0,1)) == 0
+    #         mask = mask * m
+    #     return ~mask
 
 
     def have_valid_data(self, ij):
@@ -86,13 +105,16 @@ class NocsDetection:
         image frame.
         Args:
             ij: (N, 2)
-        '''
-        # nocs_mask  = self.nocs.sum(dim=(0, 1))>0
-        # nocs_mask  = self.mask_of_nocs_preds()
+        Returns:
+            has_data: (N) bool indicating whether an index has valid data.
+        Raises:
+            ValueError: If no valid pixels are found.'''
         nocs_mask  = self.box_mask
         depth_mask = self.depth > 0
         mask = nocs_mask * depth_mask 
         has_data = mask[ij[:, 0], ij[:, 1]]
+        if has_data.sum() == 0: 
+            raise ValueError("No valid pixels.")
         return has_data
 
 
@@ -111,30 +133,52 @@ class NocsDetection:
         return cat([x, ones_like(x[:, :1])], dim=1)
     
 
-    def get_associations(self, other:'NocsDetection'):
-        
-        assert self.pose is not None and other.pose is not None, \
-            "Poses must be set before calling get_associations_with"
-
-        H, W = self.depth.shape[-2:]
-        ah, aw = arange(H, device=self.device), arange(W, device=self.device)
-        ij = flatten(stack(meshgrid(ah, aw), dim=-1), 0, 1)
-
+    def get_depth_reprojection(self, ij=None, idx=None):
+        '''Returns: xyz: (N, 3)'''
+        if idx is not None: 
+            ij = self.masks_in_image(idx).squeeze(0).nonzero()
+        elif ij is None: 
+            ij = get_ijs(*self.depth.shape[-2:], 
+                        device=self.device)
         # Select those with valid data
-        of_valid_data = self.have_valid_data(ij)
-        if of_valid_data.sum() == 0: raise ValueError("No valid pixels.")
-        ij = ij[of_valid_data]
+        ij = ij[self.have_valid_data(ij)]
         d = self.depth[ij[:, 0], ij[:, 1]]
-
-        # Get transform from 1 to 2
-        otherTself = (other.pose @ inverse(self.pose)).float()
-
         # Project to 3D
         uv = ij[:, [1, 0]]
-        xyz = inverse(self.K) @ (self._homogenized(uv) * d[:, None]).T 
+        xyz = inverse(self.K) @ (self._homogenized(uv) * d[:, None]).T
+        return xyz.T
+        
+
+    def get_nocs_reprojection(self, ij=None, idx=None):
+        '''Returns: nocs: (N, 2)'''
+        if idx is not None: 
+            ij = self.masks_in_image(idx).squeeze(0).nonzero()
+        elif ij is None: 
+            ij = get_ijs(*self.depth.shape[-2:], 
+                        device=self.device)
+        # Select those with valid data
+        ij = ij[self.have_valid_data(ij)]
+        nocs = self.get_nocs(ij)
+
+        def soft_argmax(x):
+            v = torch.arange(x.shape[2], device=x.device).float()
+            return (v[None, None, :] * x.softmax(dim=2)).sum(dim=2)
+
+        nocs = (soft_argmax(nocs) / nocs.shape[2]) - 0.5
+        return nocs
+
+
+    def get_associations(self, other:'NocsDetection'):
+        
+        assert self.camera_pose is not None and other.camera_pose is not None, \
+            "Poses must be set before calling get_associations_with"
+
+        # Get 3D points in self frame
+        xyz = self.get_depth_reprojection()
 
         # Transform to second view
-        other_xyz = otherTself @ self._homogenized(xyz.T).T
+        otherTself = (other.camera_pose @ inverse(self.camera_pose)).float()
+        other_xyz = otherTself @ self._homogenized(xyz).T
 
         # Project to 2D of second view
         other_uv  = (other.K @ other_xyz[:3] / other_xyz[2])[:2].T.long()
@@ -169,17 +213,17 @@ class NocsDetection:
         Args:
             ij: (N, 2)
         Returns:
-            nocs: (N, C) where C is the number of bins.
+            nocs: (N, 3, C) where C is the number of bins.
         '''
         nocs_channels, nocs_bins = self.nocs[0].shape[0:2]
         result = zeros(ij.shape[0], nocs_channels, nocs_bins).to(self.device)
         
         # Get sorted indices of self.scores
-        sorted_i = self.score.argsort(descending=True)
+        sorted_i = self.scores.argsort(descending=False)
 
         # Get the box with the highest score that contains ij
         for i in sorted_i:
-            box = self.box[i]
+            box = self.boxs[i]
             in_box = (ij[:, 0] >= box[1]) * (ij[:, 1] >= box[0]) * \
                      (ij[:, 0] <= box[3]) * (ij[:, 1] <= box[2])
             if in_box.sum() == 0: continue
@@ -189,23 +233,25 @@ class NocsDetection:
         return result
 
 
-    def get_as_image(self):
-        import numpy as np
-        selected_idxs = self.score > 0.4
-        stacked = stack(list(self.pred.values()), dim=1)[selected_idxs]
-        select_boxes = self.box[selected_idxs]
-        im = zeros(*stacked.shape[1:3], self.shape[0], self.shape[1])
+    def get_as_image(self, score_threshold=0.4, as_torch=False):
+        selected_idxs = self.scores > score_threshold
+        stacked = stack(list(self.preds.values()), dim=1)[selected_idxs]
+        select_boxes = self.boxs[selected_idxs]
+        im = zeros(*stacked.shape[1:3], self.shape[0], self.shape[1], device=self.device)
         
         for ci in range(stacked.shape[1]):
             pred_c = stacked[:, ci]
             reshaped = paste_in_image(pred_c, select_boxes, self.shape[0], self.shape[1],)
             im[ci] = reshaped.sum(0)
 
-        def to_img(x):
+        if as_torch: return im
+
+        def numpify(x):
+            import numpy as np
             x = ((x.argmax(dim=1) / x.shape[1]) * 255)
             return x.clone().detach().cpu().long().numpy().transpose(1, 2, 0).astype(np.uint8)
         
-        return to_img(im)
+        return numpify(im)
 
 
     def visualize_associations(self, other, n_samples=5000):
@@ -224,3 +270,105 @@ class NocsDetection:
                                matchColor = (0,255,0),
                                singlePointColor = None,
                                flags = 2)
+    
+
+    def get_reprojections(self, idx):
+        ij = self.masks_in_image(idx).squeeze(0).nonzero()
+        ij = ij[self.have_valid_data(ij)]
+        n = self.get_nocs_reprojection(  ij = ij )
+        d = self.get_depth_reprojection( ij = ij )
+        return n, d
+
+    def align_nocs_to_depth(self, depth_Rt=None):
+        '''
+        Args:
+            depth_Rt: (4, 4) transformation matrix to apply to depth points
+                before alignment.
+            Returns:
+                Rts: (N, 4, 4) transformation matrices of object poses'''
+        Rts, losses, dists = [], [], []
+        for i in range(self.__len__()):
+            try: 
+                nocs_xyz, depth_xyz = self.get_reprojections( idx = i )
+                if depth_Rt is not None: depth_xyz = (depth_Rt @ depth_xyz.T).T
+                Rt, loss, dist = test_align( nocs_xyz[None,:, :], 
+                                             depth_xyz[None,:, :] )
+                Rts.append(Rt.squeeze(0)), losses.append(loss), dists.append(dist)
+            except:
+                continue
+        if len(Rts) == 0: return None, torch.zeros(1), torch.zeros(1)
+        return stack(Rts), stack(losses), dists
+    
+    def object_pose_consistency(self, other:'NocsDetection'):
+        '''After aligning nocs to depth and derivin object poses, 
+        this function finds associated objects in self and other then
+        determines the pose consistency between them.'''
+        dt_thresh = 0.3  # TODO: make configurable
+        
+        # Get relative camera pose from self to other
+        selfTother = (other.camera_pose @ inverse(self.camera_pose)).float()
+
+        # Align nocs to depth
+        Rts1, aloss1, _ = self.align_nocs_to_depth(selfTother)
+        Rts2, aloss2, _ = other.align_nocs_to_depth()
+        
+        # Get average alignment loss
+        avg_alignment_loss = ( aloss1.mean() + aloss2.mean() ) / 2
+
+        # If no objects are found, return
+        if Rts1 is None or Rts2 is None: 
+            return 0, avg_alignment_loss
+            # raise RuntimeWarning("Failed to associate objects." +\
+            #                     " No valid objects found.")
+
+        # Get associations based on translatal proximity
+        t1, t2 = Rts1[:, :3, 3], Rts2[:, :3, 3]
+        dist_mat = (t1[:, None] - t2[None]).norm(dim=2)
+        
+        # Select the pairs with the closest centers
+        t1i, t2i = dist_mat.argmin(dim=0), torch.arange(len(t2), device=self.device)
+        select = (dist_mat[t1i, t2i] < dt_thresh)
+        t1i, t2i = t1i[select], t2i[select]
+
+        # Get the associated Rts
+        Rt1, Rt2 = Rts1[t1i], Rts2[t2i]
+        if len(Rts1) == 0 or len(Rts2) == 0: 
+            return 0, avg_alignment_loss
+            # raise RuntimeWarning("Failed to associate objects." +\
+            #                     " No objects associated.")
+        
+
+        # # TEST ###################################################################
+        # P = self.get_depth_reprojection()
+        # Q = other.get_depth_reprojection()
+
+        # P = torch.concat([P.T, torch.ones_like(P.T[:1], device=self.device)], dim=0)
+        # P_hat = (twoTone @ P).T
+
+        # import matplotlib.pyplot as plt
+        # lim = 5
+        # ax = plt.figure().add_subplot(projection='3d')
+        # def scatter(v,l,m='o', c='b'): 
+        #     v = v.clone().detach().cpu().numpy()
+        #     ax.scatter(v[:, 0], v[:, 1], v[:, 2], marker=m, label=l, color=c)
+        # scatter(Q, 'Q', 'o', 'r')
+        # scatter(P_hat, 'P hat', 'X', 'b')
+        # scatter(P, 'original P', 'X', 'g')
+        # ax.legend()
+        # for set_lim in [ax.set_xlim, ax.set_ylim, ax.set_zlim]: set_lim(-lim, lim)
+        # ax.set_xlabel('X'); ax.set_ylabel('Y'); ax.set_zlabel('Z')
+        # ax.view_init(elev=20., azim=-35, roll=0)
+        # plt.show()
+        # ##########################################################################
+
+        bottom = torch.tensor([[[0.0, 0.0, 0.0, 1.0]]], device=self.device)
+        bottom = ones_like(Rt1[:, :1, :], device=self.device) * bottom
+        Rt1 = torch.concat([Rt1, bottom], dim=1)
+        Rt2 = torch.concat([Rt2, bottom], dim=1)
+        dist = ( ( selfTother[None] @ Rt1 ) - Rt2 ).norm(dim=(1,2))
+        
+
+        # if len(dist) == 0:
+        #     raise RuntimeWarning("Failed to associate objects." +\
+        #                         " Failed.")
+        return dist.mean(), avg_alignment_loss

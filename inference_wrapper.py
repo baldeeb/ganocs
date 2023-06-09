@@ -80,7 +80,7 @@ class NocsDetector:
                                                     self._to_ndarr(Ts[0]), 
                                                     self._to_ndarr(Ss[0]), 
                                                     self._K)
-                results[i]['annotated_image'] = annotated_img
+                results[i]['annotated_image'] = annotated_img.astype(np.uint8)
 
         return results
             

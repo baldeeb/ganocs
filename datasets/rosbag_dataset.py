@@ -189,7 +189,7 @@ if __name__ == '__main__':
 
     # Determine the topics you want to acquire and their desired names
     print(get_topics_in_path(bag_path))
-    topic_names = {'/rtabmap/rtabmap/localization_pose': 'pose',
+    topic_names = {'/rtabmap/rtabmap/localization_pose': 'camera_pose',
                    '/k4a/depth_to_rgb/camera_info': 'intrinsics',
                    '/k4a/depth_to_rgb/image_raw': 'depth',
                    '/k4a/rgb/image_raw': 'color',}

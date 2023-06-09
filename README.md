@@ -6,15 +6,35 @@ The model is verified on a dataset collected using [shapenet](TODO) and the [Hab
 
 **As of April 30 a few pieces are stil pending. Check the list below.**
 
+
+## TODOs:
+ - [ ] move model/nocs_uitl to uitls/ folder.
+ - [ ] move utils/nocs_detection_wrapper.py to model/
+ - [ ] rename nocs_roi_heads to roi_heads_with_nocs
+ 
 ## Additions
 
+### Towards Loss learning
 The code contains some added features for experiments that were ran.
+- [x] results caching at train time.
+- [x] cache saving.
+- [x] loss prediction model.
 
-- [ ] results caching at train time.
-- [ ] cache saving.
-- [ ] loss prediction model.
+**NOTE**: this track was abandoned in favor of using GANS
 
-## Unimplemented portions
+### Towards Learning 2D-3D correspondances with GANs
+
+Initial proposed adding a discriminator to the nocs head training.
+ 
+ - [x] discriminator added
+ - [x] trained and tested
+
+This track yielded poor outcomes and the conclusion was that:
+
+ - instead a full GAN model should be trained in parallel given image crops 
+    as input rather than being given regions of interest.
+
+## Not Implemented portions
 
 - [x] nocs head
 - [ ] symmetry loss

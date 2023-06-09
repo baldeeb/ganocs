@@ -3,10 +3,10 @@ import numpy as np
 import wandb
 from utils.evaluation.nocs_image_loss import l2_nocs_image_loss
 from utils.visualization import draw_3d_boxes
+from utils.align import align
 
 
-
-def eval(model, dataloader, device, intrinsic, n_batches):
+def eval(model, dataloader, device, intrinsic, n_batches, log:callable=wandb.log):
     with torch.no_grad():
         model.eval()
         loss = []
@@ -19,22 +19,21 @@ def eval(model, dataloader, device, intrinsic, n_batches):
                                           target['masks'],
                                           device=device))
             if n_batches is not None and batch_i >= n_batches:
-                wandb.log({'eval_nocs_loss': sum(loss)/len(loss)})
+                log({'eval_nocs_loss': sum(loss)/len(loss)})
                 for result, image, target in zip(results, images, targets):
                     if np.prod(result['nocs'].shape) == 0: continue
-                    img = draw_box(image*255.0, 
+                    img = draw_box((image*255.0).int(), 
                                    result['masks'][0] > 0.5, 
                                    result['nocs'][0],
                                    np.array(target['depth']), 
                                    intrinsic)
                     _printable = lambda a: a.permute(1,2,0).detach().cpu().numpy()
-                    wandb.log({'image': wandb.Image(img),
+                    log({'image': wandb.Image(img),
                             'nocs':  wandb.Image(_printable(result['nocs'][0])),})
                 break
         model.train()
     
 
-from utils.align import align
 def draw_box(image, mask, nocs, depth, intrinsic):
     _to_ndarray = lambda a : a.clone().detach().cpu().numpy() if isinstance(a, torch.Tensor) else a
     transforms, scales, _ = align(_to_ndarray(mask), _to_ndarray(nocs), 

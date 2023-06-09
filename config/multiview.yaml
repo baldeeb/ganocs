@@ -1,18 +1,9 @@
 defaults:
-  - frozen_backbone
-  - override data: multiview
-  - override model: one_class
+  - base
+  - override optimization: frozen_backbone
+  - override data:         multiview
+  - override model:        multiview
+  - _self_
 
-run_name:     multiview_consistency_experiment
-device: cuda:0
-
-training:
-  loader:
-    batch_size: 4
-  
-multiview_consistency_data:
-  loader:
-    batch_size: 2
-
-multiview_consistency_loss_weight: 0.25
-multiview_consistency_frequency: 5  # every n batches run a batch with this loss
+run_name:     multiview_batch5x5_alignment
+device:       cuda:1
