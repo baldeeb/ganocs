@@ -40,11 +40,12 @@ def multiview_consistency_loss(results, targets, scores, image_shapes,
 
     try :
         if mode == 'pixelwise':
-            return multiview_pixelwise_consistency_loss(detections, n_pairs, debugging)
+            loss = multiview_pixelwise_consistency_loss(detections, n_pairs, debugging)
         elif mode == 'alignment':
-            return multiview_alignment_consistency_loss(detections)
+            loss = multiview_alignment_consistency_loss(detections)
         else:
             raise RuntimeError(f'Unknown multiview mode: {mode}')
+        return loss
     except RuntimeWarning as e:
         print(e)  # TODO: log this in a better way
         return 0
@@ -77,7 +78,7 @@ def multiview_pixelwise_consistency_loss(detections, n_pairs=100, debugging=Fals
             continue
     
     if len(loss) == 0:
-        raise RuntimeWarning("No image pairs yielded a pixelwise multiview loss...")
+        raise RuntimeWarning("Pixelwise multiview loss: No image pairs yielded a loss...")
     return sum(loss) / len(loss)
 
 
@@ -89,13 +90,17 @@ def multiview_alignment_consistency_loss(detections, n_pairs=100):
     losses = {'alignment': [], 'object_pose': []}
     for i1, i2 in pairs:
         if i1 == i2: continue
-        det1, det2 = detections[i1], detections[i2]
-        obj_pose_loss, alignment_loss = det1.object_pose_consistency(det2)
-        if obj_pose_loss: losses['object_pose'].append(obj_pose_loss)
-        # if alignment_loss: losses['alignment'].append(alignment_loss)
+        try:
+            det1, det2 = detections[i1], detections[i2]
+            obj_pose_loss, alignment_loss = det1.object_pose_consistency(det2)
+            if not obj_pose_loss.isnan(): 
+                losses['object_pose'].append(obj_pose_loss)
+            # if not alignment_loss.isnan(): 
+            #   losses['alignment'].append(alignment_loss)
+        except RuntimeWarning as e: print(e); continue  # For the purpose of debugging.
             
     if all([len(l)==0 for l in losses.values()]): 
-        raise RuntimeWarning("No image pairs yielded a multiview loss...")
+        raise RuntimeWarning("Object pose-consistency loss: No image pairs yielded a loss...")
 
     # Return the sum of the mean of each loss type    
     avgs = [sum(l)/ len(l) for l in losses.values() if len(l) > 0]

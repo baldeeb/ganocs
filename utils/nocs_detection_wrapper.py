@@ -290,15 +290,31 @@ class NocsDetection:
         for i in range(self.__len__()):
             try: 
                 nocs_xyz, depth_xyz = self.get_reprojections( idx = i )
-                if depth_Rt is not None: depth_xyz = (depth_Rt @ depth_xyz.T).T
+                
+                if depth_Rt is not None: # Transform depth to different view.
+                    depth_xyz = self._homogenize_dim_one(depth_xyz.clone().T)
+                    depth_xyz = (depth_Rt @ depth_xyz)[:3].T
+                
                 Rt, loss, dist = test_align( nocs_xyz[None,:, :], 
                                              depth_xyz[None,:, :] )
                 Rts.append(Rt.squeeze(0)), losses.append(loss), dists.append(dist)
-            except:
-                continue
+            except Exception as e:
+                print(f'align_nocs_to_depth: {e}'); continue
         if len(Rts) == 0: return None, torch.zeros(1), torch.zeros(1)
         return stack(Rts), stack(losses), dists
     
+
+    @staticmethod
+    def _homogenize_dim_one(pts):
+        '''
+        Args:
+            pts [N, 3, ...]: list of points with the second dimention to homogenize
+        '''
+        bottom = torch.zeros_like(pts[:1], device=pts.device)
+        bottom[0] = 1.0
+        return torch.concat([pts, bottom], dim=0)
+
+
     def object_pose_consistency(self, other:'NocsDetection'):
         '''After aligning nocs to depth and derivin object poses, 
         this function finds associated objects in self and other then
@@ -316,10 +332,14 @@ class NocsDetection:
         avg_alignment_loss = ( aloss1.mean() + aloss2.mean() ) / 2
 
         # If no objects are found, return
-        if Rts1 is None or Rts2 is None: 
-            return 0, avg_alignment_loss
-            # raise RuntimeWarning("Failed to associate objects." +\
-            #                     " No valid objects found.")
+        if Rts1 is None: 
+            # return 0, avg_alignment_loss
+            raise RuntimeWarning("No objects found in self image." +\
+                                " Failed to associate objects.")
+        if Rts2 is None:
+            # return 0, avg_alignment_loss
+            raise RuntimeWarning("No objects found in other images." +\
+                                " Failed to associate objects.")
 
         # Get associations based on translatal proximity
         t1, t2 = Rts1[:, :3, 3], Rts2[:, :3, 3]
@@ -333,9 +353,9 @@ class NocsDetection:
         # Get the associated Rts
         Rt1, Rt2 = Rts1[t1i], Rts2[t2i]
         if len(Rts1) == 0 or len(Rts2) == 0: 
-            return 0, avg_alignment_loss
-            # raise RuntimeWarning("Failed to associate objects." +\
-            #                     " No objects associated.")
+            # return 0, avg_alignment_loss
+            raise RuntimeWarning("No detected objects have close centers." +\
+                                " Failed to associate objects.")
         
 
         # # TEST ###################################################################
@@ -365,10 +385,9 @@ class NocsDetection:
         bottom = ones_like(Rt1[:, :1, :], device=self.device) * bottom
         Rt1 = torch.concat([Rt1, bottom], dim=1)
         Rt2 = torch.concat([Rt2, bottom], dim=1)
-        dist = ( ( selfTother[None] @ Rt1 ) - Rt2 ).norm(dim=(1,2))
+        dist = ( Rt1 - Rt2 ).norm(dim=(1,2))
         
 
-        # if len(dist) == 0:
-        #     raise RuntimeWarning("Failed to associate objects." +\
-        #                         " Failed.")
+        if len(dist) == 0:
+            raise RuntimeWarning("Failed to associate objects.")
         return dist.mean(), avg_alignment_loss

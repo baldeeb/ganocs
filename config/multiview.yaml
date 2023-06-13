@@ -5,5 +5,14 @@ defaults:
   - override model:        multiview
   - _self_
 
-run_name:     multiview_batch5x5_alignment
+run_name:     pixelwiseMultiview_fromPretrained
+# run_name:     objPoseConsistency_fromPretrained
 device:       cuda:1
+log:          True
+
+model:
+  load: ./checkpoints/nocs_classification/2023-06-08_15-27-57/OneClass-Batch24-FrozenBack_4.pth
+  num_classes: 2
+  override_num_classes: True
+  multiview:
+    loss_mode: pixelwise # 'alignment' or 'pixelwise'

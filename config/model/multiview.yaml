@@ -4,4 +4,4 @@ defaults:
 
 multiview:
   loss_weight: 1.0
-  loss_mode: 'alignment' # 'alignment' or 'alignment'
+  loss_mode: 'alignment' # 'alignment' or 'pixelwise'
