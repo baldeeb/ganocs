@@ -60,7 +60,6 @@ def multiview_pixelwise_consistency_loss(detections, n_pairs=100, debugging=Fals
         try:
             det1, det2 = detections[i1], detections[i2]
             ij1, ij2 = det1.get_associations(det2)
-
             count = int(min([len(det1), len(det2)]) * 0.5)  # TODO: make parameter
             n1, n2 = det1.get_nocs(ij1)[:count], det2.get_nocs(ij2)[:count]
 
@@ -73,9 +72,11 @@ def multiview_pixelwise_consistency_loss(detections, n_pairs=100, debugging=Fals
             if debugging:
                 cv2.imwrite("./data/temp/associations_visualization.jpg", 
                             det1.visualize_associations(det2, n_samples=10))
-            loss.append( pos_loss / neg_loss )
-        except:
-            continue
+            if pos_loss == neg_loss == 0: 
+                raise RuntimeWarning("Pixelwise loss oddly perfect...Skipped.")
+            loss.append( pos_loss / ( neg_loss + 1e-5) )
+        except RuntimeWarning as e:
+            print(e); continue
     
     if len(loss) == 0:
         raise RuntimeWarning("Pixelwise multiview loss: No image pairs yielded a loss...")

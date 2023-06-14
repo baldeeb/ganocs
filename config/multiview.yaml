@@ -7,7 +7,7 @@ defaults:
 
 run_name:     pixelwiseMultiview_fromPretrained
 # run_name:     objPoseConsistency_fromPretrained
-device:       cuda:1
+device:       cuda:0
 log:          True
 
 model:

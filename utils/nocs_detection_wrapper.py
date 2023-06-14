@@ -108,13 +108,13 @@ class NocsDetection:
         Returns:
             has_data: (N) bool indicating whether an index has valid data.
         Raises:
-            ValueError: If no valid pixels are found.'''
+            RuntimeWarning: If no valid pixels are found.'''
         nocs_mask  = self.box_mask
         depth_mask = self.depth > 0
         mask = nocs_mask * depth_mask 
         has_data = mask[ij[:, 0], ij[:, 1]]
         if has_data.sum() == 0: 
-            raise ValueError("No valid pixels.")
+            raise RuntimeWarning("has_valid_data: found no data where queried.")
         return has_data
 
 
@@ -134,7 +134,9 @@ class NocsDetection:
     
 
     def get_depth_reprojection(self, ij=None, idx=None):
-        '''Returns: xyz: (N, 3)'''
+        '''Returns: 
+            ij: [N, 2] pixels of the image that were successfully projected.
+            xyz: [N, 3] projections of valid depth found.'''
         if idx is not None: 
             ij = self.masks_in_image(idx).squeeze(0).nonzero()
         elif ij is None: 
@@ -146,7 +148,7 @@ class NocsDetection:
         # Project to 3D
         uv = ij[:, [1, 0]]
         xyz = inverse(self.K) @ (self._homogenized(uv) * d[:, None]).T
-        return xyz.T
+        return ij, xyz.T
         
 
     def get_nocs_reprojection(self, ij=None, idx=None):
@@ -174,7 +176,7 @@ class NocsDetection:
             "Poses must be set before calling get_associations_with"
 
         # Get 3D points in self frame
-        xyz = self.get_depth_reprojection()
+        ij, xyz = self.get_depth_reprojection()
 
         # Transform to second view
         otherTself = (other.camera_pose @ inverse(self.camera_pose)).float()
@@ -186,19 +188,22 @@ class NocsDetection:
 
         # Select in other frame
         in_other_frame = other.in_frame(other_ij)
-        if in_other_frame.sum() == 0: raise ValueError("No points in other frame.")
+        if in_other_frame.sum() == 0: 
+            raise RuntimeWarning("get_associations: frame did not overlap.")
         ij, other_ij = ij[in_other_frame], other_ij[in_other_frame]
         other_xyz = other_xyz[:, in_other_frame]
 
         # Select valid projects
         valid_proj = other.have_valid_data(other_ij)
-        if valid_proj.sum() == 0: raise ValueError("No valid projections.")
+        if valid_proj.sum() == 0: 
+            raise RuntimeWarning("get_associations: has no valid depth or NOCS in other view.")
         ij, other_ij = ij[valid_proj], other_ij[valid_proj]
         other_xyz = other_xyz[:, valid_proj]
 
         # Select only non-occluded samples
         is_visible = ~other.occluded(other_ij, other_xyz[2])
-        if is_visible.sum() == 0: raise ValueError("No visible points.")
+        if is_visible.sum() == 0: 
+            raise RuntimeWarning("get_associations: All projections are occluded in other view.")
         ij, other_ij = ij[is_visible], other_ij[is_visible]
 
         return ij.long(), other_ij.long()
@@ -276,7 +281,7 @@ class NocsDetection:
         ij = self.masks_in_image(idx).squeeze(0).nonzero()
         ij = ij[self.have_valid_data(ij)]
         n = self.get_nocs_reprojection(  ij = ij )
-        d = self.get_depth_reprojection( ij = ij )
+        _, d = self.get_depth_reprojection( ij = ij )
         return n, d
 
     def align_nocs_to_depth(self, depth_Rt=None):
@@ -359,8 +364,8 @@ class NocsDetection:
         
 
         # # TEST ###################################################################
-        # P = self.get_depth_reprojection()
-        # Q = other.get_depth_reprojection()
+        # _, P = self.get_depth_reprojection()
+        # _, Q = other.get_depth_reprojection()
 
         # P = torch.concat([P.T, torch.ones_like(P.T[:1], device=self.device)], dim=0)
         # P_hat = (twoTone @ P).T
