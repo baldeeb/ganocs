@@ -5,14 +5,34 @@ defaults:
   - override model:        multiview
   - _self_
 
-run_name:     pixelwiseMultiview_fromPretrained
-# run_name:     objPoseConsistency_fromPretrained
-device:       cuda:0
+# run_name:     pixelwiseMultiview_fromPretrained
+# run_name:     objPoseConsistency_withTemperature_fromPretrained
+run_name:     alignDepthAndNocs_allHeads_fromScratchOnOldData
+device:       cuda:1
 log:          True
 
 model:
-  load: ./checkpoints/nocs_classification/2023-06-08_15-27-57/OneClass-Batch24-FrozenBack_4.pth
+  # load: ./checkpoints/nocs_classification/2023-06-08_15-27-57/OneClass-Batch24-FrozenBack_4.pth
   num_classes: 2
   override_num_classes: True
   multiview:
-    loss_mode: pixelwise # 'alignment' or 'pixelwise'
+    # loss_weight: 0.1 # default is 10
+    loss_mode: 
+      - alignment 
+      # - pixelwise
+      # - pose DOESN't WORK
+
+optimization:
+  parameters: [roi_heads]  # roi_heads or nocs_heads
+  optimizer: 
+    lr: 0.001
+    weight_decay: 1e-6
+
+
+data:
+  training:
+    dataset:
+      data_dir: ./data/old-habitat-gen/200of100scenes_26selectChairs/train
+    batch_size: 8
+  multiview:
+    batch_size: 8

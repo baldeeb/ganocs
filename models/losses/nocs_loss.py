@@ -119,7 +119,14 @@ def nocs_loss(gt_labels,
 
     if loss_fx == cross_entropy:
         assert mode == 'classification', 'Cross entropy only supports classification'
-        targets = (targets * proposals.shape[2]).round().long()  # To indices
+        targets = (targets * proposals.shape[2]).round().long()  # (0->1) to indices [0, 1, ...]
+        # Temperature to limit the proposal probabilities.
+        if False:
+            thresh = 1e4
+            pmin, pmax = proposals.min(), proposals.max() 
+            tau = min([thresh/abs(pmin), thresh/pmax, 1.0])
+            proposals = proposals * tau # multiply by temperature
+            # assert not proposals.isnan().any(), 'Proposals are NAN after temperature.'
         loss = cross_entropy(proposals.transpose(1,2), 
                              targets,
                              reduction=reduction)

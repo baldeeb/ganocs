@@ -291,7 +291,7 @@ class NocsDetection:
                 before alignment.
             Returns:
                 Rts: (N, 4, 4) transformation matrices of object poses'''
-        Rts, losses, dists = [], [], []
+        Rts, losses, dists, weights = [], [], [], []
         for i in range(self.__len__()):
             try: 
                 nocs_xyz, depth_xyz = self.get_reprojections( idx = i )
@@ -302,11 +302,14 @@ class NocsDetection:
                 
                 Rt, loss, dist = test_align( nocs_xyz[None,:, :], 
                                              depth_xyz[None,:, :] )
-                Rts.append(Rt.squeeze(0)), losses.append(loss), dists.append(dist)
+                Rts.append(Rt.squeeze(0))
+                losses.append(loss)
+                dists.append(dist)
+                weights.append(self.scores[i])
             except Exception as e:
                 print(f'align_nocs_to_depth: {e}'); continue
         if len(Rts) == 0: return None, torch.zeros(1), torch.zeros(1)
-        return stack(Rts), stack(losses), dists
+        return stack(Rts), stack(losses), stack(weights)[:, None]  # dists?
     
 
     @staticmethod
@@ -386,10 +389,6 @@ class NocsDetection:
         # plt.show()
         # ##########################################################################
 
-        bottom = torch.tensor([[[0.0, 0.0, 0.0, 1.0]]], device=self.device)
-        bottom = ones_like(Rt1[:, :1, :], device=self.device) * bottom
-        Rt1 = torch.concat([Rt1, bottom], dim=1)
-        Rt2 = torch.concat([Rt2, bottom], dim=1)
         dist = ( Rt1 - Rt2 ).norm(dim=(1,2))
         
 

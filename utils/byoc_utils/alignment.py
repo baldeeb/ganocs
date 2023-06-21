@@ -67,8 +67,9 @@ def align(corres, P, Q, align_cfg=DEFAULT_ALIGN_CONFIG(), overwrite_weighting=No
     return Rt, corr_loss, dist_PQ
 
 
-def test_align(P, Q):
+def test_align(P, Q, detach_transform=True):
     Rt = randomized_weighted_procrustes(P, Q, weights=None, align_cfg=DEFAULT_ALIGN_CONFIG())
+    if detach_transform: Rt = Rt.detach()
     
     # Calculate correspondance loss
     corr_P_rot = transform_points_Rt(P, Rt)

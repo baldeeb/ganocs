@@ -68,7 +68,7 @@ def run(cfg: DictConfig) -> None:
             targets = targets2device(targets, cfg.device)       # TODO: Discard and pass device to collate_fn
             
             losses = model(images, targets)                     # Forward pass
-            losses.update(multiview_loss())                     # Add multiview loss
+            losses.update(multiview_loss())                     # (Optional) Add multiview loss
             loss = sum(losses.values())                         # Sum losses
             
             optimizer.zero_grad()
