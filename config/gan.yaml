@@ -1,0 +1,26 @@
+defaults:
+  - base
+  - override optimization: frozen_backbone
+  - override model:        gan
+  - _self_
+
+run_name:     gan
+device:       cuda:1
+log:          True
+
+model:
+  num_classes: 2
+  override_num_classes: True
+
+optimization:
+  parameters: [roi_heads]  # roi_heads or nocs_heads
+  optimizer: 
+    lr: 0.0001
+    weight_decay: 1e-6
+
+
+data:
+  training:
+    dataset:
+      data_dir: ./data/old-habitat-gen/200of100scenes_26selectChairs/train
+    batch_size: 8

@@ -46,7 +46,7 @@ def multiview_consistency_loss(results, targets, scores, image_shapes,
             elif m == 'alignment':
                 loss += depth_alignment_loss(detections)
             elif m == 'pose':
-                loss += multiview_alignment_consistency_loss(detections)
+                loss += multiview_pose_consistency_loss(detections)
             else:
                 raise RuntimeError(f'Unknown multiview modes: {mode}')
         return loss
@@ -100,8 +100,14 @@ def depth_alignment_loss(detections):
     if len(losses) == 0: return 0
     return sum(losses)/len(losses)
 
-
-def multiview_alignment_consistency_loss(detections, n_pairs=100):
+###########################################################
+### NOTE! 
+###########################################################
+### Propagating back through the pose estimation code
+### is not stable and so this does not work.
+### WHY? tbd ...
+###########################################################
+def multiview_pose_consistency_loss(detections, n_pairs=100):
     # Using consistency of object pose as loss
     pairs = _sample_n_pairs(n_pairs, len(detections))
     losses = {'alignment': [], 'object_pose': []}

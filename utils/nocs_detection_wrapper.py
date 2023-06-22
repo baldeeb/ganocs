@@ -139,11 +139,12 @@ class NocsDetection:
             xyz: [N, 3] projections of valid depth found.'''
         if idx is not None: 
             ij = self.masks_in_image(idx).squeeze(0).nonzero()
+            ij = ij[self.have_valid_data(ij)]
         elif ij is None: 
             ij = get_ijs(*self.depth.shape[-2:], 
                         device=self.device)
+            ij = ij[self.have_valid_data(ij)]
         # Select those with valid data
-        ij = ij[self.have_valid_data(ij)]
         d = self.depth[ij[:, 0], ij[:, 1]]
         # Project to 3D
         uv = ij[:, [1, 0]]
@@ -155,11 +156,13 @@ class NocsDetection:
         '''Returns: nocs: (N, 2)'''
         if idx is not None: 
             ij = self.masks_in_image(idx).squeeze(0).nonzero()
+            ij = ij[self.have_valid_data(ij)]
         elif ij is None: 
             ij = get_ijs(*self.depth.shape[-2:], 
                         device=self.device)
+            ij = ij[self.have_valid_data(ij)]
+            
         # Select those with valid data
-        ij = ij[self.have_valid_data(ij)]
         nocs = self.get_nocs(ij)
 
         def soft_argmax(x):
