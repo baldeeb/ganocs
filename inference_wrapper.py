@@ -24,10 +24,13 @@ class NocsDetector:
                  return_annotated_image=False,
                  perform_alignment=True,
                  **kwargs):
-        kwargs.update(self._default_config)
-        self._device = kwargs['device'] if 'device' in kwargs \
+        # kwargs.update(self._default_config)
+        args = self._default_config
+        args.update(kwargs)
+         
+        self._device = args['device'] if 'device' in args \
             else torch.device('cuda' if torch.cuda.is_available() else 'cpu')
-        self.model = load_nocs(checkpoint, **kwargs)
+        self.model = load_nocs(checkpoint, **args)
         self.model.eval().to(self._device)
         self._K = self._to_ndarr(intrinsic)
         self._draw_box = return_annotated_image

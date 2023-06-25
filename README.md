@@ -6,15 +6,6 @@ The model is verified on a dataset collected using [shapenet](TODO) and the [Hab
 
 **As of April 30 a few pieces are stil pending. Check the list below.**
 
-## TODOs
-
-- [ ] move model/nocs_uitl to uitls/ folder.
-- [ ] move utils/nocs_detection_wrapper.py to model/
-- [ ] rename nocs_roi_heads to roi_heads_with_nocs
-- [ ] multiview loss and nocs alignment contains many acceptable failure cases.
-        Create a custom Exception to identify acceptable failures. Currently
-        all throw RuntimeWarnings.
-
 ## Additions
 
 ### Towards Loss learning
@@ -41,19 +32,26 @@ This track yielded poor outcomes and the conclusion was that:
 
 ## Not Implemented portions
 
-- [x] nocs head
-- [ ] symmetry loss
-    - [x] implemented nocs map rotation
-    - [ ] pass in config that indicates what labels have what symmetries
-    - [ ] integrate the symmetry loss by: 
-        - Rotating the ground-truth map.
-        - Multiply the rotated maps with the mask to ensure that the segmentation is retained.
-        - Get the loss against all rotated ground-truth maps.
-        - apply the argmin over all losses against rotated maps.
-- [ ] box fitting (Umeyama optimization)
-    - The umeyama implementation from the original nocs work is copied into utils/aligning.py. 
-    All that remains is using those to derive the box and pose metrics.s
+    - [x] nocs head.
+    - [ ] symmetry loss
+      - [x] implemented nocs map rotation
+      - [ ] pass in config that indicates what labels have what symmetries
+      - [ ] integrate the symmetry loss by:
+          - Rotating the ground-truth map.
+          - Multiply the rotated maps with the mask to ensure that the segmentation is retained.
+          - Get the loss against all rotated ground-truth maps.
+          - apply the argmin over all losses against rotated maps.
+    - [ ] box fitting (Umeyama optimization)
+      - The umeyama implementation from the original nocs work is copied into utils/aligning.py. All that remains is using those to derive the box and pose metrics.s
+  
+## Code TODOs
 
+- [ ] move model/nocs_uitl to uitls/ folder.
+- [ ] move utils/nocs_detection_wrapper.py to model/
+- [ ] rename nocs_roi_heads to roi_heads_with_nocs
+- [ ] multiview loss and nocs alignment contains many acceptable failure cases.
+        Create a custom Exception to identify acceptable failures. Currently
+        all throw RuntimeWarnings.
 
 ## References
 
