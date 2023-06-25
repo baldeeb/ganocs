@@ -4,3 +4,6 @@ conda install pytorch torchvision torchaudio pytorch-cuda=11.7 -c pytorch -c nvi
 conda install pytorch3d -c pytorch3d
 
 pip install hydra-core --update
+
+# for the original nocs dataset
+conda install -c conda-forge scikit-image

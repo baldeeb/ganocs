@@ -1,0 +1,75 @@
+# 0, 40, 46, rand, rand, 64, 42
+synset_names : 
+  - BG      #0
+  - bottle  #1
+  - bowl    #2
+  - camera  #3
+  - can     #4
+  - laptop  #5
+  - mug     #6
+            
+class_map : 
+  bottle: bottle
+  bowl: bowl
+  cup: mug
+  laptop: laptop
+
+camera_dir: ./data/original_nocs_data/camera
+real_dir:   ./data/original_nocs_data/real
+
+common_configs:
+  IMAGE_MAX_DIM: 800
+  IMAGE_MIN_DIM: 1024
+  IMAGE_PADDING: True  # currently, the False option is not supported
+  OBJ_MODEL_DIR: ./data/original_nocs_data/obj_models
+
+  MEAN_PIXEL: [123.7, 116.8, 103.9]
+  MAX_GT_INSTANCES: 20
+
+  # If enabled, resizes instance masks to a smaller size to reduce
+  # memory load. Recommended when using high-resolution images.
+  USE_MINI_MASK: False  # NOTE: this is a change from oriinal code
+  MINI_MASK_SHAPE: [28, 28]  # (height, width) of the mini-mask
+
+
+training:
+  _target_: datasets.original_nocs.multiloader.NOCSMultiDatasetLoader
+  batch_size: 4
+  dataset_priorities: [0.4, 0.6]  # Should be the same length as datasets
+                              # Is used as multinomial weights for sampling
+  augment: True
+  shuffle: True
+
+  datasets:
+    real:
+      type: real
+      loader:
+        _target_: datasets.original_nocs.dataset.NOCSData
+        synset_names: ${synset_names}
+        subset: 'train'
+        config: ${common_configs}
+      dataset_dir: ${real_dir}
+      class_map: ${class_map}
+      shuffle: ${training.shuffle}
+      augment: ${training.augment}
+    camera:
+      type: synthetic
+      loader:
+        _target_: datasets.original_nocs.dataset.NOCSData
+        synset_names: ${synset_names}
+        subset: 'train'
+        config: ${common_configs}
+      dataset_dir: ${camera_dir}
+      class_map: ${class_map}
+      shuffle: ${training.shuffle}
+      augment: ${training.augment}
+
+# testing:
+#   _target_: torch.utils.data.DataLoader
+#   batch_size: 4
+#   shuffle: True
+#   collate_fn: 
+#     _target_:  habitat_datagen_util.utils.collate_tools.CollateFunctor
+#   dataset:
+#     _target_: habitat_datagen_util.utils.dataset.HabitatDataset
+#     data_dir: ./data/habitat/test
