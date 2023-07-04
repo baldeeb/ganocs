@@ -72,7 +72,7 @@ def unmold_image(normalized_images, config):
 ############################################################
 #  Data Generator
 ############################################################
-
+# TODO: move into the dataset class!!!
 class Dataset(torch.utils.data.Dataset):
     def __init__(self, dataset, config, augment=False):
         """A generator that returns images and corresponding target class ids,
@@ -124,7 +124,7 @@ class Dataset(torch.utils.data.Dataset):
         image_id = self.image_ids[image_index]
 
         
-        image, image_metas, gt_boxes, gt_masks, gt_coords, gt_domain_label = \
+        image, depth, image_metas, gt_boxes, gt_masks, gt_coords, gt_domain_label, scale= \
             load_image_gt(self.dataset, self.config, image_id, augment=self.augment,
                           use_mini_mask=self.config.USE_MINI_MASK)
         
@@ -136,46 +136,45 @@ class Dataset(torch.utils.data.Dataset):
             # rpn_bbox = 0
             # rpn_match = 0
             gt_class_ids = 0
-            return (image, image_metas, 
-                    # rpn_match, rpn_bbox, 
-                    gt_class_ids, gt_boxes, 
-                    gt_masks, gt_coords, 
-                    gt_domain_label)
+ 
+        else:
+            # RPN Targets
+            # rpn_match, rpn_bbox = build_rpn_targets(image.shape, self.anchors, gt_boxes, self.config)
 
-        # RPN Targets
-        # rpn_match, rpn_bbox = build_rpn_targets(image.shape, self.anchors, gt_boxes, self.config)
+            # If more instances than fits in the array, sub-sample from them.
+            if gt_boxes.shape[0] > self.config.MAX_GT_INSTANCES:
+                ids = np.random.choice(
+                    np.arange(gt_boxes.shape[0]), self.config.MAX_GT_INSTANCES, replace=False)
+                gt_class_ids = gt_class_ids[ids]
+                gt_boxes = gt_boxes[ids]
+                gt_masks = gt_masks[:, :, ids]
 
-        # If more instances than fits in the array, sub-sample from them.
-        if gt_boxes.shape[0] > self.config.MAX_GT_INSTANCES:
-            ids = np.random.choice(
-                np.arange(gt_boxes.shape[0]), self.config.MAX_GT_INSTANCES, replace=False)
-            gt_class_ids = gt_class_ids[ids]
-            gt_boxes = gt_boxes[ids]
-            gt_masks = gt_masks[:, :, ids]
+            # Add to batch
+            # rpn_match = rpn_match[:, np.newaxis]
+            image = mold_image(image.astype(np.float32), self.config)
+            gt_class_ids = gt_boxes[:,-1]
 
-        # Add to batch
-        # rpn_match = rpn_match[:, np.newaxis]
-        images = mold_image(image.astype(np.float32), self.config)
-        gt_class_ids = gt_boxes[:,-1]
+            # # Convert
+            # images = torch.from_numpy(images.transpose(2, 0, 1)).float()
+            # image_metas = torch.from_numpy(image_metas)
+            # # rpn_match = torch.from_numpy(rpn_match)
+            # # rpn_bbox = torch.from_numpy(rpn_bbox).float()
+            # gt_class_ids = torch.from_numpy(gt_class_ids)
+            # gt_boxes = torch.from_numpy(gt_boxes).float()
+            # gt_masks = torch.from_numpy(gt_masks.astype(int).transpose(2, 0, 1)).float()
+            # gt_coords = torch.from_numpy(gt_coords)
+            # # gt_domain_label = torch.from_numpy(gt_domain_label)
 
-        # Convert
-        images = torch.from_numpy(images.transpose(2, 0, 1)).float()
-        image_metas = torch.from_numpy(image_metas)
-        # rpn_match = torch.from_numpy(rpn_match)
-        # rpn_bbox = torch.from_numpy(rpn_bbox).float()
-        gt_class_ids = torch.from_numpy(gt_class_ids)
-        gt_boxes = torch.from_numpy(gt_boxes).float()
-        gt_masks = torch.from_numpy(gt_masks.astype(int).transpose(2, 0, 1)).float()
-        gt_coords = torch.from_numpy(gt_coords)
-        # gt_domain_label = torch.from_numpy(gt_domain_label)
-
-
-        return (images, image_metas, 
+        return (image, 
+                depth, 
+                self.dataset.intrinsics,  
+                # image_metas,
                 # rpn_match, rpn_bbox, 
-                gt_class_ids, gt_boxes, 
-                gt_masks, gt_coords, 
+                gt_class_ids,
+                gt_boxes, 
+                gt_masks, 
+                gt_coords, 
                 gt_domain_label)
-
     def __len__(self):
         return self.image_ids.shape[0]
     
@@ -209,6 +208,7 @@ def load_image_gt(dataset, config, image_id, augment=False,
         image = dataset.load_image(image_id)
         mask, coord, class_ids, scales, domain_label = dataset.load_mask(image_id)
     
+    depth = dataset.load_depth(image_id)
 
     shape = image.shape
     image, window, scale, padding = resize_image(
@@ -245,10 +245,9 @@ def load_image_gt(dataset, config, image_id, augment=False,
     # Image meta data
     image_meta = compose_image_meta(image_id, shape, window, active_class_ids)
 
-    if load_scale:
-        return image, image_meta, bbox, mask, coord, domain_label, scales
-    else:
-        return image, image_meta, bbox, mask, coord, domain_label
+    if not load_scale: scales = None
+
+    return (image, depth, image_meta, bbox, mask, coord, domain_label, scales)
 
 # def build_rpn_targets(image_shape, anchors, gt_boxes, config):
 #     """Given the anchors and GT boxes, compute overlaps and identify positive

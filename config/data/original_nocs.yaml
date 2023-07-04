@@ -34,11 +34,16 @@ common_configs:
 
 training:
   _target_: datasets.original_nocs.multiloader.NOCSMultiDatasetLoader
-  batch_size: 4
+  batch_size: 32
   dataset_priorities: [0.4, 0.6]  # Should be the same length as datasets
                               # Is used as multinomial weights for sampling
   augment: True
   shuffle: True
+
+  collate: 
+    _target_: hydra.utils.get_method
+    path: datasets.original_nocs.collate_tools.collate_fn
+
 
   datasets:
     real:
@@ -48,6 +53,8 @@ training:
         synset_names: ${synset_names}
         subset: 'train'
         config: ${common_configs}
+        intrinsics: [[591.0125, 0, 322.525], [0, 590.16775, 244.11084], [0, 0, 1]]
+        depth_scale: 0.001  # mm to m
       dataset_dir: ${real_dir}
       class_map: ${class_map}
       shuffle: ${training.shuffle}
@@ -59,6 +66,8 @@ training:
         synset_names: ${synset_names}
         subset: 'train'
         config: ${common_configs}
+        intrinsics: [[577.5, 0, 319.5], [0., 577.5, 239.5], [0., 0., 1.]]
+        depth_scale: 0.001  # mm to m
       dataset_dir: ${camera_dir}
       class_map: ${class_map}
       shuffle: ${training.shuffle}

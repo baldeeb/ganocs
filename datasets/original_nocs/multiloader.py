@@ -17,6 +17,10 @@ class NOCSMultiDatasetLoader:
         self._set_weights = torch.tensor(dataset_priorities)
         self._batch_size = batch_size
         self._iters = [iter(s) for s in self._sets]
+        self._exhausted = torch.zeros(len(self._iters))
+
+        if 'collate' in kwargs: self._collate = kwargs['collate']  
+        else:                   self._collate = lambda x: x
     
     def _init_dataset(self, set_cfg:DictConfig):
         dataset = set_cfg.loader
@@ -26,20 +30,28 @@ class NOCSMultiDatasetLoader:
             dataset.load_camera_scenes(set_cfg.dataset_dir)
         dataset.prepare(set_cfg.class_map)
         dataset = Dataset(dataset, set_cfg.loader.config, augment=set_cfg.augment)
-        return DataLoader(dataset, shuffle=set_cfg.shuffle, batch_size=1)
+        return DataLoader(dataset, 
+                          shuffle=set_cfg.shuffle, 
+                          batch_size=1,
+                          collate_fn=lambda x: x)
     
-    def __getitem__(self, *args, **kwargs):
+    def __getitem__(self, _):
         '''NOTE: Not great but a hot fix to get things tested.'''
         set_idxs = torch.multinomial(self._set_weights, self._batch_size, replacement=True)
         out = []
         for set_i in set_idxs:
             try:
                 # yield next(self._iters[set_i])
-                out.append(next(self._iters[set_i]))
+                # print(f'set index: {set_i}')
+                out.append(next(self._iters[set_i])[0])
             except StopIteration:
+                self._exhausted[set_i] = 1
+                if all(self._exhausted): raise StopIteration
                 self._iters[set_i] = iter(self._sets[set_i])
-                out.append(next(self._iters[set_i]))
+                out.append(next(self._iters[set_i])[0])
                 # yield next(self._iters[set_i])
+        if self._collate is not None: 
+            return self._collate(out)
         return out
 
     def __len__(self):

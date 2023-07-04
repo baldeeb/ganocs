@@ -6,9 +6,10 @@ from omegaconf import DictConfig, OmegaConf
 def run(cfg: DictConfig):
     
     dataloader = hydra.utils.instantiate(cfg.training)
-    # print(OmegaConf.to_yaml(set_cfg))
-    for data in dataloader:
-        print(len(data))
+    print(f'dataset has {len(dataloader)} elements')
+
+    for i, data in enumerate(dataloader):
+        print(f'iter: {i} - len: {len(data[1])}')
     print('Done')
 
 

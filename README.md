@@ -41,8 +41,9 @@ This track yielded poor outcomes and the conclusion was that:
           - Multiply the rotated maps with the mask to ensure that the segmentation is retained.
           - Get the loss against all rotated ground-truth maps.
           - apply the argmin over all losses against rotated maps.
-    - [ ] box fitting (Umeyama optimization)
+    - [x] box fitting (Umeyama optimization)
       - The umeyama implementation from the original nocs work is copied into utils/aligning.py. All that remains is using those to derive the box and pose metrics.s
+    - [ ] Augmentation for habitat data.
   
 ## Code TODOs
 

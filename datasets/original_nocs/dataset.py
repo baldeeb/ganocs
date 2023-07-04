@@ -242,7 +242,7 @@ class CocoDataset(Dataset):
 
 class NOCSData(Dataset):
 
-    def __init__(self, synset_names, subset, config):
+    def __init__(self, synset_names, subset, config, intrinsics=None, depth_scale=None):
         self._image_ids = []
         self.image_info = []
         # Background is always the first class
@@ -254,7 +254,8 @@ class NOCSData(Dataset):
         assert subset in ['train', 'val', 'test']
 
         self.config = config
-
+        self.intrinsics = np.array(intrinsics)
+        self.depth_scale = depth_scale
         self.source_image_ids = {}
 
         # Add classes
@@ -433,7 +434,10 @@ class NOCSData(Dataset):
                 assert False, '[ Error ]: Unsupported depth type.'
         else:
             depth16 = None
-            
+        
+        if self.depth_scale is not None:
+            depth16 = depth16 * self.depth_scale
+        
         return depth16
 
     def image_reference(self, image_id):
