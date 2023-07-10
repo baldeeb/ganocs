@@ -210,14 +210,15 @@ def load_image_gt(dataset, config, image_id, augment=False,
     
     depth = dataset.load_depth(image_id)
 
-    shape = image.shape
-    image, window, scale, padding = resize_image(
-        image,
-        min_dim=config.IMAGE_MIN_DIM,
-        max_dim=config.IMAGE_MAX_DIM,
-        padding=config.IMAGE_PADDING)
-    mask = resize_mask(mask, scale, padding)
-    coord = resize_mask(coord, scale, padding)
+    # NOTE: commented out. dealth with later in the code.
+    # shape = image.shape
+    # image, window, scale, padding = resize_image(
+    #     image,
+    #     min_dim=config.IMAGE_MIN_DIM,
+    #     max_dim=config.IMAGE_MAX_DIM,
+    #     padding=config.IMAGE_PADDING)
+    # mask = resize_mask(mask, scale, padding)
+    # coord = resize_mask(coord, scale, padding)
 
 
     # Bounding boxes. Note that some boxes might be all zeros
@@ -242,8 +243,10 @@ def load_image_gt(dataset, config, image_id, augment=False,
         mask = minimize_mask(bbox, mask, config.MINI_MASK_SHAPE)
         coord =  minimize_mask(bbox, coord, config.MINI_MASK_SHAPE)
 
+    # NOTE: commented out. dealth with later in the code.
     # Image meta data
-    image_meta = compose_image_meta(image_id, shape, window, active_class_ids)
+    # image_meta = compose_image_meta(image_id, shape, window, active_class_ids)
+    image_meta = None
 
     if not load_scale: scales = None
 

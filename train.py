@@ -58,7 +58,6 @@ def run(cfg: DictConfig) -> None:
 
     # Pretrained wieghts eval
     eval(model, testing_dataloader, cfg.device, 
-         testing_dataloader.dataset.intrinsic(), 
          cfg.num_eval_batches, log=log)
 
     # Training
@@ -79,7 +78,6 @@ def run(cfg: DictConfig) -> None:
             log({'loss': loss})
             if batch_i % cfg.batches_before_eval == 0:          # Eval
                 eval(model, testing_dataloader, cfg.device, 
-                     testing_dataloader.dataset.intrinsic(), 
                      cfg.num_eval_batches, log=log) 
         save_model(model, pl.Path(cfg.checkpoint_dir)/f'{cfg.run_name}_{epoch}.pth')
         log({'epoch': epoch})

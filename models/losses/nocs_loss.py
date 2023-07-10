@@ -27,8 +27,18 @@ def project_on_boxes(gt, boxes, matched_idxs, M):
     """
     matched_idxs = matched_idxs.to(boxes)
     rois = torch.cat([matched_idxs[:, None], boxes], dim=1)
-    gt = gt.unsqueeze(0).to(rois)
-    return roi_align(gt, rois, (M, M), 1.0)
+    # gt = gt.unsqueeze(0).to(rois)
+    return roi_align(gt.transpose(0, 1), rois, (M, M), 1.0)
+
+# def project_on_boxes(gt, boxes, matched_idxs, M):
+#     # type: (Tensor, Tensor, Tensor, int) -> Tensor
+#     """ Projects gt nocs corresponding to the boxes  to a region of shape (M, M)."""
+
+#     # matched_idxs = matched_idxs.to(boxes)
+#     # rois = torch.cat([matched_idxs[:, None], boxes], dim=1)
+#     rois = boxes
+#     gt = gt.unsqueeze(0).to(rois)
+#     return roi_align(gt, rois, (M, M), 1.0)
 
 def discriminator_as_loss(discriminator:DiscriminatorWithOptimizer, 
                           proposals:torch.Tensor, 
@@ -67,7 +77,8 @@ def discriminator_as_loss(discriminator:DiscriminatorWithOptimizer,
     
 
 def nocs_loss(gt_labels, 
-              gt_nocs, 
+              gt_nocs,
+              gt_masks,
               nocs_proposals, 
               proposed_box_regions, 
               matched_ids, 
@@ -101,17 +112,19 @@ def nocs_loss(gt_labels,
     
     NOTE: Symmetry loss is not implemented
     '''
-
     # Select the label for each proposal
     labels = [gt_label[idxs] for gt_label, idxs 
               in zip(gt_labels, matched_ids)]
-    proposals = select_labels(nocs_proposals, labels)  # Dict (3 values) [B, N, H, W] 
-    proposals = torch.stack(tuple(proposals.values()), dim=1) # [B, 3, N, H, W] 
+    proposals = select_labels(nocs_proposals, labels)  # Dict (3 values) [T, N, H, W] 
+    proposals = torch.stack(tuple(proposals.values()), dim=1) # [T, 3, N, H, W] 
     
+    masked_nocs = [n[:, None] * m[None].to(n) for n, m in zip(gt_nocs, gt_masks)]
+
+
     # Reshape to fit box by performing roi_align
     W = proposals.shape[-1]  # Width of proposal we want gt to match
     targets = [project_on_boxes(m, p, i, W) 
-        for m, p, i in zip(gt_nocs, proposed_box_regions, matched_ids)]
+        for m, p, i in zip(masked_nocs, proposed_box_regions, matched_ids)]
     targets = torch.cat(targets, dim=0) # [B, 3, H, W]
 
     # If target is empty return 0
@@ -119,7 +132,7 @@ def nocs_loss(gt_labels,
 
     if loss_fx == cross_entropy:
         assert mode == 'classification', 'Cross entropy only supports classification'
-        targets = (targets * proposals.shape[2]).round().long()  # (0->1) to indices [0, 1, ...]
+        targets_idxs = (targets * proposals.shape[2]).round().long()  # (0->1) to indices [0, 1, ...]
         # Temperature to limit the proposal probabilities.
         if False:
             thresh = 1e4
@@ -128,7 +141,7 @@ def nocs_loss(gt_labels,
             proposals = proposals * tau # multiply by temperature
             # assert not proposals.isnan().any(), 'Proposals are NAN after temperature.'
         loss = cross_entropy(proposals.transpose(1,2), 
-                             targets,
+                             targets_idxs,
                              reduction=reduction)
     elif isinstance(loss_fx, DiscriminatorWithOptimizer):
         loss = discriminator_as_loss(loss_fx, proposals, targets,

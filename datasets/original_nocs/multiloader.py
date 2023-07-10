@@ -2,6 +2,7 @@ from omegaconf import DictConfig
 from torch.utils.data import DataLoader
 from .datagen import Dataset
 import torch
+import logging
 
 # NOTE: https://github.com/sahithchada/NOCS_PyTorch/blob/f4ed85efec3b39476bda74ef84a314fcbcf8f0b3/model.py#L1786
 #     is a good reference summarizing how the dataset was used previously.
@@ -15,6 +16,7 @@ class NOCSMultiDatasetLoader:
         for set_cfg in datasets.values():
             self._sets.append(self._init_dataset(set_cfg)) 
         self._set_weights = torch.tensor(dataset_priorities)
+        assert len(self._sets) == len(self._set_weights), 'dataset_priorities must have same length as datasets'
         self._batch_size = batch_size
         self._iters = [iter(s) for s in self._sets]
         self._exhausted = torch.zeros(len(self._iters))
@@ -44,7 +46,8 @@ class NOCSMultiDatasetLoader:
                 # yield next(self._iters[set_i])
                 # print(f'set index: {set_i}')
                 out.append(next(self._iters[set_i])[0])
-            except StopIteration:
+            except StopIteration as e:
+                logging.warning(f'Exhausted dataset {set_i}\n{e}')
                 self._exhausted[set_i] = 1
                 if all(self._exhausted): raise StopIteration
                 self._iters[set_i] = iter(self._sets[set_i])

@@ -1,0 +1,24 @@
+defaults:
+  - model: base
+  - optimization: frozen_backbone
+  - data:         original_nocs
+  - _self_
+
+project_name:        nocs_with_multiview_consistency
+run_name:            original_nocs_data
+device:              cuda:0 # cpu, cuda:0
+log:                 True
+num_epochs:          5
+batches_before_eval: 5
+checkpoint_dir:     ./checkpoints/nocs_classification/${now:%Y-%m-%d_%H-%M-%S}
+num_eval_batches: 10
+
+model:
+  num_classes: 80
+  override_num_classes: True
+
+optimization:
+  parameters: [roi_heads]  # roi_heads or nocs_heads
+  optimizer: 
+    lr: 0.0001
+    weight_decay: 1e-6

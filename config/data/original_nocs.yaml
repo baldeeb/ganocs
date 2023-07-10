@@ -18,9 +18,13 @@ camera_dir: ./data/original_nocs_data/camera
 real_dir:   ./data/original_nocs_data/real
 
 common_configs:
+  #################################################################################################################################
+  # NOTE: deactivated/commented-out. Weird and dealt with in the wrest of the code.
   IMAGE_MAX_DIM: 800
   IMAGE_MIN_DIM: 1024
   IMAGE_PADDING: True  # currently, the False option is not supported
+  #################################################################################################################################
+
   OBJ_MODEL_DIR: ./data/original_nocs_data/obj_models
 
   MEAN_PIXEL: [123.7, 116.8, 103.9]
@@ -34,8 +38,9 @@ common_configs:
 
 training:
   _target_: datasets.original_nocs.multiloader.NOCSMultiDatasetLoader
-  batch_size: 32
-  dataset_priorities: [0.4, 0.6]  # Should be the same length as datasets
+  batch_size: 2
+  dataset_priorities: [1.0]  
+  # dataset_priorities: [0.4, 0.6]  # Should be the same length as datasets
                               # Is used as multinomial weights for sampling
   augment: True
   shuffle: True
@@ -44,41 +49,70 @@ training:
     _target_: hydra.utils.get_method
     path: datasets.original_nocs.collate_tools.collate_fn
 
-
   datasets:
     real:
       type: real
       loader:
         _target_: datasets.original_nocs.dataset.NOCSData
-        synset_names: ${synset_names}
+        synset_names: ${data.synset_names}
         subset: 'train'
-        config: ${common_configs}
+        config: ${data.common_configs}
         intrinsics: [[591.0125, 0, 322.525], [0, 590.16775, 244.11084], [0, 0, 1]]
         depth_scale: 0.001  # mm to m
-      dataset_dir: ${real_dir}
-      class_map: ${class_map}
-      shuffle: ${training.shuffle}
-      augment: ${training.augment}
+      dataset_dir: ${data.real_dir}
+      class_map: ${data.class_map}
+      shuffle: ${data.training.shuffle}
+      augment: ${data.training.augment}
+    # camera:
+    #   type: synthetic
+    #   loader:
+    #     _target_: datasets.original_nocs.dataset.NOCSData
+    #     synset_names: ${data.synset_names}
+    #     subset: 'train'
+    #     config: ${data.common_configs}
+    #     intrinsics: [[577.5, 0, 319.5], [0., 577.5, 239.5], [0., 0., 1.]]
+    #     depth_scale: 0.001  # mm to m
+    #   dataset_dir: ${data.camera_dir}
+    #   class_map: ${data.class_map}
+    #   shuffle: ${data.training.shuffle}
+    #   augment: ${data.training.augment}
+
+testing:
+  _target_: datasets.original_nocs.multiloader.NOCSMultiDatasetLoader
+  batch_size: 4
+  dataset_priorities: [1.0]  # Should be the same length as datasets
+                           # Is used as multinomial weights for sampling
+  augment: True
+  shuffle: True
+
+  collate: 
+    _target_: hydra.utils.get_method
+    path: datasets.original_nocs.collate_tools.collate_fn
+
+  datasets:
     camera:
       type: synthetic
       loader:
         _target_: datasets.original_nocs.dataset.NOCSData
-        synset_names: ${synset_names}
-        subset: 'train'
-        config: ${common_configs}
+        synset_names: ${data.synset_names}
+        subset: 'val'
+        config: ${data.common_configs}
         intrinsics: [[577.5, 0, 319.5], [0., 577.5, 239.5], [0., 0., 1.]]
         depth_scale: 0.001  # mm to m
-      dataset_dir: ${camera_dir}
-      class_map: ${class_map}
-      shuffle: ${training.shuffle}
-      augment: ${training.augment}
+      dataset_dir: ${data.camera_dir}
+      class_map: ${data.class_map}
+      shuffle: ${data.training.shuffle}
+      augment: ${data.training.augment}
 
-# testing:
-#   _target_: torch.utils.data.DataLoader
-#   batch_size: 4
-#   shuffle: True
-#   collate_fn: 
-#     _target_:  habitat_datagen_util.utils.collate_tools.CollateFunctor
-#   dataset:
-#     _target_: habitat_datagen_util.utils.dataset.HabitatDataset
-#     data_dir: ./data/habitat/test
+
+
+## NOTE: This is for comparison and testing purposes. 
+base:
+  _target_: torch.utils.data.DataLoader
+  batch_size: 4
+  shuffle: True
+  collate_fn: 
+    _target_:  habitat_datagen_util.utils.collate_tools.CollateFunctor
+  dataset:
+    _target_: habitat_datagen_util.utils.dataset.HabitatDataset
+    data_dir: ./data/habitat/train
