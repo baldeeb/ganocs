@@ -132,7 +132,7 @@ def nocs_loss(gt_labels,
 
     if loss_fx == cross_entropy:
         assert mode == 'classification', 'Cross entropy only supports classification'
-        targets_idxs = (targets * proposals.shape[2]).round().long()  # (0->1) to indices [0, 1, ...]
+        targets_idxs = (targets * (proposals.shape[2] - 1)).round().long()  # (0->1) to indices [0, 1, ...]
         # Temperature to limit the proposal probabilities.
         if False:
             thresh = 1e4

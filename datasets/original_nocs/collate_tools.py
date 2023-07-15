@@ -19,7 +19,9 @@ def collate_fn(batch):
         depth           = torch.as_tensor(data[1]).float()
         intrinsics      = torch.as_tensor(data[2]).float()
         labels          = torch.as_tensor(data[3])
-        boxes           = torch.as_tensor(data[4])[:, :4]  # 5 dim, last dim might be class or anchor
+        b               = torch.as_tensor(data[4])[:, :4].float()  # 5 dim, last dim might be class or anchor
+        boxes           = torch.stack([b[:, 1], b[:, 0], b[:, 3], b[:, 2]], dim=1) # width min, height min, width max, height max
+        # boxes           = b
         masks           = torch.as_tensor(data[5]).permute(2, 0, 1).bool()
         nocs            = torch.as_tensor(data[6]).float().sum(dim=2).permute(2, 0, 1)
         

@@ -38,8 +38,7 @@ def compare_datasets(cfg: DictConfig):
                 if lv is None: 
                     print(f'{lk} = None')
                     continue
-                print(f'{lk}, length: {lv.shape}')
-                print(f'\ttype: {type(lv)}')
+                print(f'{lk}, {lv.shape}  -  {type(lv)}')
                 try: print(f'\t min: {min(lv)}, max: {max(lv)}')
                 except: 
                     try: print(f'\t min: {lv.min()}, max: {lv.max()}')
@@ -48,7 +47,19 @@ def compare_datasets(cfg: DictConfig):
                 except: pass
                 
             break
+
+        print('boxes')
+        print(data[1][0]['boxes'])
         print('*'*10)
+
+
+
+@hydra.main(version_base=None, config_path="./config", config_name="original_data")
+def debug_iterators(cfg: DictConfig):
+    dataset = hydra.utils.instantiate(cfg.data.training),
+
+    for i, data in enumerate(dataset[0]):
+        print(f'iter: {i} - len: {len(data[0])}')
 
 
 def init_datasets(cfg):
@@ -66,6 +77,49 @@ def init_datasets(cfg):
     init_set(cfg.training.datasets.real)
     init_set(cfg.training.datasets.camera)
 
+
+
+
+import hydra
+from omegaconf import DictConfig, OmegaConf
+
+@hydra.main(config_path='./config', config_name='original_data', version_base=None)
+def verify_data(cfg: DictConfig):
+    # L = hydra.utils.instantiate(cfg.data.training)
+    # L = hydra.utils.instantiate(cfg.data.testing)
+    L = hydra.utils.instantiate(cfg.data.base)
+    
+    
+    # plot image with annotated boxes and object classes
+    import matplotlib.pyplot as plt
+    import matplotlib.patches as patches
+
+    def plot_image(img, boxes, labels, scores=None):
+        fontsize, font_color = 12, 'red'
+        fig, ax = plt.subplots(1)
+        ax.imshow(img)
+        for i, box in enumerate(boxes):
+            x1, y1, x2, y2 = box
+            w = x2 - x1
+            h = y2 - y1
+            rect = patches.Rectangle((x1, y1), w, h, linewidth=1, edgecolor='r', facecolor='none')
+            ax.add_patch(rect)
+            if scores is not None:
+                ax.text(x1, y1, f'{labels[i]}: {scores[i]:.2f}', color=font_color, fontsize=fontsize)
+            else:
+                ax.text(x1, y1, f'{labels[i]}', color=font_color, fontsize=fontsize)
+        plt.show()
+
+
+    for i, data in enumerate(L):
+        img = data[0][0].permute(1,2,0)
+        boxes = data[1][0]['boxes']
+        labels = data[1][0]['labels']
+        plot_image(img, boxes, labels)
+        if i > 5: break
+
 if __name__ == "__main__":
     # run()
-    compare_datasets()
+    # compare_datasets()
+    # debug_iterators()
+    verify_data()

@@ -19,7 +19,7 @@ real_dir:   ./data/original_nocs_data/real
 
 common_configs:
   #################################################################################################################################
-  # NOTE: deactivated/commented-out. Weird and dealt with in the wrest of the code.
+  # NOTE: deactivated/commented-out. Weird and dealt with by mrcnn.
   IMAGE_MAX_DIM: 800
   IMAGE_MIN_DIM: 1024
   IMAGE_PADDING: True  # currently, the False option is not supported
@@ -38,10 +38,12 @@ common_configs:
 
 training:
   _target_: datasets.original_nocs.multiloader.NOCSMultiDatasetLoader
-  batch_size: 2
-  dataset_priorities: [1.0]  
-  # dataset_priorities: [0.4, 0.6]  # Should be the same length as datasets
-                              # Is used as multinomial weights for sampling
+  batch_size: 8
+
+  # TODO: move this to the datasets.
+  # dataset_priorities: [1.0]  
+  dataset_priorities: [0.4, 0.6]  # Should be the same length as datasets
+                                  # Is used as multinomial weights for sampling
   augment: True
   shuffle: True
 
@@ -63,19 +65,19 @@ training:
       class_map: ${data.class_map}
       shuffle: ${data.training.shuffle}
       augment: ${data.training.augment}
-    # camera:
-    #   type: synthetic
-    #   loader:
-    #     _target_: datasets.original_nocs.dataset.NOCSData
-    #     synset_names: ${data.synset_names}
-    #     subset: 'train'
-    #     config: ${data.common_configs}
-    #     intrinsics: [[577.5, 0, 319.5], [0., 577.5, 239.5], [0., 0., 1.]]
-    #     depth_scale: 0.001  # mm to m
-    #   dataset_dir: ${data.camera_dir}
-    #   class_map: ${data.class_map}
-    #   shuffle: ${data.training.shuffle}
-    #   augment: ${data.training.augment}
+    camera:
+      type: synthetic
+      loader:
+        _target_: datasets.original_nocs.dataset.NOCSData
+        synset_names: ${data.synset_names}
+        subset: 'train'
+        config: ${data.common_configs}
+        intrinsics: [[577.5, 0, 319.5], [0., 577.5, 239.5], [0., 0., 1.]]
+        depth_scale: 0.001  # mm to m
+      dataset_dir: ${data.camera_dir}
+      class_map: ${data.class_map}
+      shuffle: ${data.training.shuffle}
+      augment: ${data.training.augment}
 
 testing:
   _target_: datasets.original_nocs.multiloader.NOCSMultiDatasetLoader
