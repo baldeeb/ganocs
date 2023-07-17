@@ -11,30 +11,26 @@ def collate_fn(batch):
     # rgb = img2tensor('image')
     # nocs = img2tensor('nocs')
 
-    rgb = [torch.as_tensor(v[0]) for v in batch]
-
+    # rgb = [torch.as_tensor(v[0].copy()).permute(2, 0, 1) for v in batch]
+    rgb = []
     targets = []
     for i, data in enumerate(batch):
 
-        depth = torch.as_tensor(data[1])
-        # image_metas     = inputs[1] ???
-        # gt_class_ids    = data[2] ???
-        intrinsics      = torch.as_tensor(data[2])
-        
+        depth           = torch.as_tensor(data[1]).float()
+        intrinsics      = torch.as_tensor(data[2]).float()
         labels          = torch.as_tensor(data[3])
-        boxes           = torch.as_tensor(data[4])
-        masks           = torch.as_tensor(data[5])
-        nocs            = torch.as_tensor(data[6])
-
-        ############################################################
-        # NOTE: Guildeline to check the data types and shapes above.
-        # masks = torch.as_tensor(labels2masks(images['semantics']))
-        # boxes = mask2bbox(masks[None]).type(torch.float64).reshape([-1, 4])
-        # labels = torch.ones(boxes.size(0)).type(torch.int64)  # NOTE: currently only one class exists
-        # semantics = torch.as_tensor(images['semantics'].astype(np.int64)).unsqueeze(0)
-        # semantic_ids = torch.as_tensor([v['semantic_id'] for v in meta['objects'].values()])
-        ############################################################
+        b               = torch.as_tensor(data[4])[:, :4].float()  # 5 dim, last dim might be class or anchor
+        boxes           = torch.stack([b[:, 1], b[:, 0], b[:, 3], b[:, 2]], dim=1) # width min, height min, width max, height max
+        # boxes           = b
+        masks           = torch.as_tensor(data[5]).permute(2, 0, 1).bool()
+        nocs            = torch.as_tensor(data[6]).float().sum(dim=2).permute(2, 0, 1)
         
+        if len(labels.shape) == 0 or labels.shape[0] == 0: 
+            print(f'Warning: empty labels for image {i}')
+            continue
+
+        rgb.append(torch.as_tensor(data[0].copy()).permute(2, 0, 1))
+
         targets.append({
             'depth': depth, 
             'masks': masks, 
@@ -42,7 +38,8 @@ def collate_fn(batch):
             'labels': labels, 
             'boxes': boxes, 
             'camera_pose': None,
-            'intrinsics': intrinsics,  # TODO: figure this out. 
-            })
+            'intrinsics': intrinsics,
+        })
 
+    rgb = torch.stack(rgb, dim=0).float()
     return rgb, targets

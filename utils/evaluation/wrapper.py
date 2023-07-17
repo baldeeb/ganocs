@@ -6,7 +6,7 @@ from utils.visualization import draw_3d_boxes
 from utils.align import align
 
 
-def eval(model, dataloader, device, intrinsic, n_batches, log:callable=wandb.log):
+def eval(model, dataloader, device, n_batches, log:callable=wandb.log):
     with torch.no_grad():
         model.eval()
         loss = []
@@ -16,7 +16,7 @@ def eval(model, dataloader, device, intrinsic, n_batches, log:callable=wandb.log
             for result, target in zip(results, targets):
                 loss.append(l2_nocs_image_loss(result['nocs'], 
                                           target['nocs'], 
-                                          target['masks'],
+                                          result['masks'],
                                           device=device))
             if n_batches is not None and batch_i >= n_batches:
                 log({'eval_nocs_loss': sum(loss)/len(loss)})
@@ -26,7 +26,7 @@ def eval(model, dataloader, device, intrinsic, n_batches, log:callable=wandb.log
                                    result['masks'][0] > 0.5, 
                                    result['nocs'][0],
                                    np.array(target['depth']), 
-                                   intrinsic)
+                                   target['intrinsics'])
                     _printable = lambda a: a.permute(1,2,0).detach().cpu().numpy()
                     log({'image': wandb.Image(img),
                             'nocs':  wandb.Image(_printable(result['nocs'][0])),})

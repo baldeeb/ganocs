@@ -199,10 +199,13 @@ class RoIHeadsWithNocs(RoIHeads):
 
                 # Add NOCS to Loss
                 if self.has_nocs():
-                    gt_nocs = [t["nocs"] for t in targets]
+                    device = mask_logits.device
+                    gt_nocs = [t["nocs"].to(device) for t in targets]
 
                     reduction = 'none' if self.cache_results else 'mean'
-                    loss_mask["loss_nocs"] = nocs_loss(gt_labels, gt_nocs, 
+                    loss_mask["loss_nocs"] = nocs_loss(gt_labels, 
+                                                       gt_nocs, 
+                                                       gt_masks,
                                                        nocs_proposals, 
                                                        proposed_box_regions,
                                                        pos_matched_idxs,

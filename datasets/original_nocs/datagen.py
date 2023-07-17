@@ -63,12 +63,14 @@ def mold_image(images, config):
     the mean pixel and converts it to float. Expects image
     colors in RGB order.
     """
-    return images.astype(np.float32) - config.MEAN_PIXEL
+    # return images.astype(np.float32) - config.MEAN_PIXEL
+    return images.astype(np.float32) / 255.0
 
 
 def unmold_image(normalized_images, config):
     """Takes a image normalized with mold() and returns the original."""
-    return (normalized_images + config.MEAN_PIXEL).astype(np.uint8)
+    # return (normalized_images + config.MEAN_PIXEL).astype(np.uint8)
+    return (normalized_images * 255.0).astype(np.uint8)
 ############################################################
 #  Data Generator
 ############################################################
@@ -210,14 +212,15 @@ def load_image_gt(dataset, config, image_id, augment=False,
     
     depth = dataset.load_depth(image_id)
 
-    shape = image.shape
-    image, window, scale, padding = resize_image(
-        image,
-        min_dim=config.IMAGE_MIN_DIM,
-        max_dim=config.IMAGE_MAX_DIM,
-        padding=config.IMAGE_PADDING)
-    mask = resize_mask(mask, scale, padding)
-    coord = resize_mask(coord, scale, padding)
+    # NOTE: commented out. dealth with later in the code.
+    # shape = image.shape
+    # image, window, scale, padding = resize_image(
+    #     image,
+    #     min_dim=config.IMAGE_MIN_DIM,
+    #     max_dim=config.IMAGE_MAX_DIM,
+    #     padding=config.IMAGE_PADDING)
+    # mask = resize_mask(mask, scale, padding)
+    # coord = resize_mask(coord, scale, padding)
 
 
     # Bounding boxes. Note that some boxes might be all zeros
@@ -242,8 +245,10 @@ def load_image_gt(dataset, config, image_id, augment=False,
         mask = minimize_mask(bbox, mask, config.MINI_MASK_SHAPE)
         coord =  minimize_mask(bbox, coord, config.MINI_MASK_SHAPE)
 
+    # NOTE: commented out. dealth with later in the code.
     # Image meta data
-    image_meta = compose_image_meta(image_id, shape, window, active_class_ids)
+    # image_meta = compose_image_meta(image_id, shape, window, active_class_ids)
+    image_meta = None
 
     if not load_scale: scales = None
 

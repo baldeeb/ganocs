@@ -24,6 +24,10 @@ import glob
 DEFAULT_DATASET_YEAR = 2014
 
 
+class BadDataException(Exception):
+    def __init__(self, message):
+        super().__init__(message)
+
 class CocoDataset(Dataset):
     def load_coco(self, dataset_dir, subset, year=DEFAULT_DATASET_YEAR, class_ids=None,
                   class_map=None, return_coco=False, auto_download=False):
@@ -457,7 +461,8 @@ class NOCSData(Dataset):
         instance_ids = list(np.unique(cdata))
         instance_ids = sorted(instance_ids)
         # remove background
-        assert instance_ids[-1] == 255
+        if instance_ids[-1] != 255:
+            raise BadDataException('No objects in image.')
         del instance_ids[-1]
 
         cdata[cdata==255] = -1
