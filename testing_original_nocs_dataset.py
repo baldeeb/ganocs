@@ -1,22 +1,24 @@
 import hydra
 from omegaconf import DictConfig, OmegaConf
+from tqdm import tqdm
 
-
-@hydra.main(version_base=None, config_path="./config/data", config_name="original_nocs")
-def run(cfg: DictConfig):
+@hydra.main(version_base=None, config_path="./config", config_name="original_data")
+def testing_termination(cfg: DictConfig):
     
-    dataloader = hydra.utils.instantiate(cfg.training)
-    # base = hydra.utils.instantiate(cfg.base)
-    testing = hydra.utils.instantiate(cfg.testing)
-    
-    print(f'dataset has {len(dataloader)} elements')
-    print(f'testing dataset has {len(testing)} elements')
 
-    for i, data in enumerate(dataloader):
-        print(f'iter: {i} - len: {len(data[1])}')
-    print('Done')
+    datasets = {
+        'training': hydra.utils.instantiate(cfg.data.training),
+        'testing': hydra.utils.instantiate(cfg.data.testing),
+        'habitat': hydra.utils.instantiate(cfg.data.base),
+    }
+    def __test(x, n):
+        print(f'{n} data length {len(x)}')
+        for _ in tqdm(x, total=len(x)):
+            pass
+        print('Done')
 
-
+    for k, v in datasets.items():
+        __test(v, k)
 
 @hydra.main(version_base=None, config_path="./config", config_name="original_data")
 def compare_datasets(cfg: DictConfig):
@@ -85,9 +87,9 @@ from omegaconf import DictConfig, OmegaConf
 
 @hydra.main(config_path='./config', config_name='original_data', version_base=None)
 def verify_data(cfg: DictConfig):
-    # L = hydra.utils.instantiate(cfg.data.training)
+    L = hydra.utils.instantiate(cfg.data.training)
     # L = hydra.utils.instantiate(cfg.data.testing)
-    L = hydra.utils.instantiate(cfg.data.base)
+    # L = hydra.utils.instantiate(cfg.data.base)
     
     
     # plot image with annotated boxes and object classes
@@ -119,7 +121,7 @@ def verify_data(cfg: DictConfig):
         if i > 5: break
 
 if __name__ == "__main__":
-    # run()
+    testing_termination()
     # compare_datasets()
     # debug_iterators()
-    verify_data()
+    # verify_data()
