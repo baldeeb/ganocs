@@ -26,8 +26,7 @@ def collate_fn(batch):
         nocs            = torch.as_tensor(data[6]).float().sum(dim=2).permute(2, 0, 1)
         
         if len(labels.shape) == 0 or labels.shape[0] == 0: 
-            print(f'Warning: empty labels for image {i}')
-            continue
+            raise RuntimeError(f'Warning: collate called on data with no labels.')
 
         rgb.append(torch.as_tensor(data[0].copy()).permute(2, 0, 1))
 

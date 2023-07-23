@@ -53,13 +53,7 @@ class NOCS(MaskRCNN):
         mask_roi_pool=None,
         mask_head=None,
         mask_predictor=None,
-        # NOCS parameters
-
-        # nocs_bins=32,
-        # cache_results=False,
-        # nocs_loss=torch.nn.functional.cross_entropy,  # can be cross entropy or discriminator
-        # multiheaded_nocs=False,
-        # Others
+        # NOCS parameters - part of kwargs
         **kwargs,
     ):
         '''

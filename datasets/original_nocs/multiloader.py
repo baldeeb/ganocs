@@ -56,7 +56,8 @@ class NOCSMultiDatasetLoader:
                     # TODO: should I just remove the exhausted dataset?
                     self._exhausted.add(set_i)
                     logging.warning(f'Exhausted dataset {set_i}\n{e}')
-                    if all(self._exhausted): raise StopIteration
+                    if all([i in self._exhausted for i in range(len(self._iters))]): 
+                           raise StopIteration
                     self._iters[set_i] = iter(self._sets[set_i])
                     data = next(self._iters[set_i])[0]
                 # These are ugly feature of the original dataset.
