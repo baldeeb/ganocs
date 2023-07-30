@@ -1,6 +1,7 @@
 import torch
 from torch import nn
 from torch.nn.functional import binary_cross_entropy
+from models.film import FiLMLayer
 
 
 class Discriminator(nn.Module):
@@ -10,21 +11,25 @@ class Discriminator(nn.Module):
         super().__init__()
 
         # a 4x4 kernel model. closer to DCGAN.
-        # NOTE: currently collapses the generator.
-        if True:
-            fcs = [in_ch, feat_ch, 2*feat_ch, 4*feat_ch, 8*feat_ch, 1]
-            self.model = nn.Sequential(
-                nn.Conv2d(fcs[0], fcs[1], 4, 2, 1, bias=False),
-                nn.LeakyReLU(0.2, inplace=True),
-                nn.Conv2d(fcs[1], fcs[2], 4, 2, 1, bias=False),
-                nn.BatchNorm2d(fcs[2]),
-                nn.LeakyReLU(0.2, inplace=True),
-                nn.Conv2d(fcs[2], fcs[3], 4, 2, 1, bias=False),
-                nn.BatchNorm2d(fcs[3]),
-                nn.LeakyReLU(0.2, inplace=True),
-                nn.Conv2d(fcs[3], fcs[5], 3, 1, 0, bias=False),
-                nn.Sigmoid()
-            )
+        self.model = nn.Sequential(
+            nn.Conv2d(in_ch, feat_ch, 4, 2, 1, bias=False),
+            nn.LeakyReLU(0.2, inplace=True),
+
+            nn.Conv2d(feat_ch,   2*feat_ch, 4, 2, 1, bias=False),
+            nn.BatchNorm2d(2*feat_ch),
+            nn.LeakyReLU(0.2, inplace=True),
+            
+            nn.Conv2d(2*feat_ch, 4*feat_ch, 4, 2, 1, bias=False),
+            nn.BatchNorm2d(4*feat_ch),
+            nn.LeakyReLU(0.2, inplace=True),
+            
+            # nn.Conv2d(4*feat_ch, 8*feat_ch, 4, 2, 1, bias=False),
+            # nn.BatchNorm2d(8*feat_ch),
+            # nn.LeakyReLU(0.2, inplace=True),
+            
+            nn.Conv2d(4*feat_ch, 1, 3, 1, 0, bias=False),
+            nn.Sigmoid()
+        )
         self._init_weights()
 
     def _init_weights(self):
@@ -34,11 +39,41 @@ class Discriminator(nn.Module):
     def forward(self, x):
         return self.model(x)
     
-
 class ContextAwareDiscriminator(nn.Module):
     '''Discriminator built for FiLM layers. Accepts depth as context.'''
-    pass
+    def __init__(self, in_ch, feat_ch, dim_ctx):
+        super().__init__()
+        def _f(i, f, k=4, s=2, p=1, act=True, bn=True):  
+            '''Helper for layer definition'''
+            FiLMLayer(in_ch=i, 
+                      out_ch=f,
+                      kernel_size=k, 
+                      stride=s,
+                      padding=p, 
+                      bias=False,
+                      dim_ctx=dim_ctx,
+                      activation=nn.LeakyReLU(0.2, inplace=True) \
+                                 if act else lambda x:x,
+                      batch_norm=nn.BatchNorm2d \
+                                 if bn else lambda x:x
+            )
+        self._model_list = nn.ModuleList([
+            _f(in_ch,     feat_ch,   bn=False     ), # no batchnorm
+            _f(feat_ch,   2*feat_ch,              ),
+            _f(2*feat_ch, 4*feat_ch,              ),
+            _f(4*feat_ch, 1,         k=3, s=1, p=0), # final layer
+        ])
+        self._init_weights()
 
+    def _init_weights(self):
+        for m in self.modules():
+            if isinstance(m, nn.Conv2d):
+                nn.init.normal_(m.weight, 0, 0.02)
+
+    def forward(self, x, ctx):
+        for m in self._model_list:
+            x = m (x, ctx)
+        return x
 
 class DiscriminatorWithOptimizer(Discriminator):
     '''Discriminator model for NOCS images.
@@ -103,14 +138,22 @@ class MultiClassDiscriminatorWithOptimizer(nn.Module):
                              'betas':(0.5, 0.999)},
                  logger=None
                 ):
+        super().__init__()
         '''Assumes class zero is discarded/background as does MRCNN.'''
         self.discriminators = nn.ModuleDict({
-            i: DiscriminatorWithOptimizer(in_ch, feat_ch, optimizer, optim_args, logger)
+            str(i): DiscriminatorWithOptimizer(in_ch, 
+                                               feat_ch, 
+                                               optimizer, 
+                                               optim_args, 
+                                               logger)
             for i in range(1, num_classes)
         })
 
     def update(self, targets, predictions, class_id):
-        return self.discriminators[class_id].update(targets, predictions)
+        losses = []
+        for i, t, p in zip([class_id, targets, predictions]):
+            losses.append(self.discriminators[str(i)].update(t, p))
+        return torch.mean(losses)
     
     def forward(self, x, class_id):
-        return self.discriminators[class_id].forward(x)
+        return self.discriminators[str(class_id)].forward(x)

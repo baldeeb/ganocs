@@ -1,17 +1,20 @@
-import torch
 from torch import nn
 
-class FiLMLayer(nn.module):
+class FiLMLayer(nn.Module):
     '''A convolutional layer with feature modulation.'''
-    def __init__(self, in_ch, out_ch, kernel_size=3, padding=1,
+    def __init__(self, in_ch, out_ch, 
+                 kernel_size=3, 
+                 stride=1, 
+                 padding=0,
+                 dilation=1,
                  dim_ctx=64,
-                 activation=nn.ReLU,
+                 activation=nn.ReLU(inplace=True),
                  batch_norm=nn.BatchNorm2d):
         super().__init__()
         self.layer = nn.Sequential(
-            nn.Conv2d(in_ch, out_ch, kernel_size, padding=padding),
+            nn.Conv2d(in_ch, out_ch, kernel_size, stride, padding, dilation),
             batch_norm(out_ch),
-            activation(inplace=True)
+            activation
         )
 
         self.bias = nn.Linear(dim_ctx, out_ch, bias=False)

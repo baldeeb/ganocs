@@ -9,7 +9,7 @@ run_name:            original_nocs_data
 device:              cuda:0 # cpu, cuda:0
 log:                 True
 num_epochs:          5
-batches_before_eval: 5
+batches_before_eval: 20
 checkpoint_dir:     ./checkpoints/nocs_classification/${now:%Y-%m-%d_%H-%M-%S}
 num_eval_batches: 10
 
