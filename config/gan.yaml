@@ -2,6 +2,7 @@ defaults:
   - base
   - override optimization: frozen_backbone
   - override model:        gan
+  - override data:         original_nocs
   - _self_
 
 run_name:     gan
@@ -9,7 +10,7 @@ device:       cuda:1
 log:          True
 
 model:
-  num_classes: 80
+  num_classes: 20
   override_num_classes: True
 
 optimization:
@@ -19,8 +20,8 @@ optimization:
     weight_decay: 1e-6
 
 
-data:
-  training:
-    dataset:
-      data_dir: ./data/old-habitat-gen/200of100scenes_26selectChairs/train
-    batch_size: 8
+# data:
+#   training:
+#     dataset:
+#       data_dir: ./data/old-habitat-gen/200of100scenes_26selectChairs/train
+#     batch_size: 8

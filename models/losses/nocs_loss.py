@@ -86,7 +86,7 @@ def multiclass_discriminator_as_loss(discriminator:DiscriminatorWithOptimizer,
     discriminator.update(targets, prediction, classes)
     
     # Get nocs loss
-    l = discriminator(prediction)
+    l = discriminator(prediction, classes)
     return binary_cross_entropy(l, torch.ones_like(l), reduction=reduction)
 
     
@@ -170,7 +170,7 @@ def nocs_loss(gt_labels,
         loss = multiclass_discriminator_as_loss(loss_fx, 
                                                 proposals, 
                                                 targets, 
-                                                gt_labels,
+                                                labels,
                                                 reduction=reduction,
                                                 mode=mode)
 
