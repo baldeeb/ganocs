@@ -35,10 +35,11 @@ common_configs:
   USE_MINI_MASK: False  # NOTE: this is a change from oriinal code
   MINI_MASK_SHAPE: [28, 28]  # (height, width) of the mini-mask
 
+batch_size_all: 8
 
 training:
   _target_: datasets.original_nocs.multiloader.NOCSMultiDatasetLoader
-  batch_size: 4
+  batch_size: ${data.batch_size_all}
 
   # TODO: move this to the datasets.
   # dataset_priorities: [1.0]  
@@ -81,7 +82,7 @@ training:
 
 testing:
   _target_: datasets.original_nocs.multiloader.NOCSMultiDatasetLoader
-  batch_size: 4
+  batch_size: ${data.batch_size_all}
   dataset_priorities: [1.0]  # Should be the same length as datasets
                            # Is used as multinomial weights for sampling
   augment: True
@@ -111,7 +112,7 @@ testing:
 ## NOTE: This is for comparison and testing purposes. 
 base:
   _target_: torch.utils.data.DataLoader
-  batch_size: 4
+  batch_size: ${data.batch_size_all}
   shuffle: True
   collate_fn: 
     _target_:  habitat_datagen_util.utils.collate_tools.CollateFunctor

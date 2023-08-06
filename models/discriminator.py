@@ -158,5 +158,5 @@ class MultiClassDiscriminatorWithOptimizer(nn.Module):
     def forward(self, x, class_id):
         losses = []
         for i, p in zip(torch.cat(class_id), x):
-            losses = self.discriminators[str(i.item())].forward(p[None])
+            losses.append(self.discriminators[str(i.item())].forward(p[None]))
         return torch.cat(losses)
