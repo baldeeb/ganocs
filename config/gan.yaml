@@ -6,15 +6,15 @@ defaults:
   - _self_
 
 run_name:     gan
-device:       cuda:1
+device:       cuda:0
 log:          True
 
 model:
-  num_classes: 20
+  num_classes: 10
   override_num_classes: True
 
 optimization:
-  parameters: [roi_heads]  # roi_heads or nocs_heads
+  parameters: [roi_heads, rpn, fpn]  # roi_heads or nocs_heads
   optimizer: 
     lr: 0.0001
     weight_decay: 1e-6
