@@ -61,6 +61,9 @@ class NOCSMultiDatasetLoader:
             set_i = torch.multinomial(self._set_weights, 1).item()
             try:
                 data = next(self._iters[set_i])[0]
+                if (isinstance(data[3], np.ndarray) and len(data[3]) == 0) \
+                    or (isinstance(data[3], int) and data[3] == 0): 
+                    continue  # ignore data with no labels
             except StopIteration as e:
                 # TODO: should I just remove the exhausted dataset?
                 logging.warning(f'Exhausted dataset {set_i}\n{e}')
@@ -69,16 +72,14 @@ class NOCSMultiDatasetLoader:
                 if all([i in self._exhausted for i in range(len(self._iters))]): 
                     logging.warning('all datasets exhausted')
                     raise StopIteration
-                continue
+                else: continue
             # These are ugly feature of the original dataset.
             except BadDataException as e:
                 logging.warning(f'Bad data in dataset {set_i}\n{e}')
                 continue
-            except Exception as e:
-                print(e)
-            if (isinstance(data[3], np.ndarray) and len(data[3]) == 0) \
-                or (isinstance(data[3], int) and data[3] == 0): 
-                continue  # ignore data with no labels
+            # except Exception as e:
+            #     print(e)
+
             out.append(data)
         if self._collate is not None: 
             return self._collate(out)

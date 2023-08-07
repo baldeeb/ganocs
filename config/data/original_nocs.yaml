@@ -35,7 +35,7 @@ common_configs:
   USE_MINI_MASK: False  # NOTE: this is a change from oriinal code
   MINI_MASK_SHAPE: [28, 28]  # (height, width) of the mini-mask
 
-batch_size_all: 8
+batch_size_all: 10
 
 training:
   _target_: datasets.original_nocs.multiloader.NOCSMultiDatasetLoader
