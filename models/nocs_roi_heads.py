@@ -202,6 +202,9 @@ class RoIHeadsWithNocs(RoIHeads):
                     device = mask_logits.device
                     gt_nocs = [t["nocs"].to(device) for t in targets]
 
+                    if len(targets)> 0 and 'depth' in targets[0]:
+                        depth = [t['depth'] for t in targets]
+
                     reduction = 'none' if self.cache_results else 'mean'
                     loss_mask["loss_nocs"] = nocs_loss(gt_labels, 
                                                        gt_nocs, 
@@ -212,6 +215,7 @@ class RoIHeadsWithNocs(RoIHeads):
                                                        reduction=reduction,
                                                        loss_fx=self.nocs_loss,
                                                        mode=self.nocs_loss_mode,
+                                                       depth=depth
                                                        **self._kwargs)
                     
                     if self.cache_results:

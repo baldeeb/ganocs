@@ -4,7 +4,9 @@ from torch.nn.functional import (cross_entropy,
                                  binary_cross_entropy, 
                                  softmax)
 from models.nocs_util import select_labels
-from models.discriminator import DiscriminatorWithOptimizer, MultiClassDiscriminatorWithOptimizer
+from models.discriminator import (DiscriminatorWithOptimizer, 
+                                  MultiClassDiscriminatorWithOptimizer, 
+                                  ContextAwareDiscriminator)
 
 def project_on_boxes(data, boxes, matched_idxs, M)->torch.Tensor:
     """ Code borrowed from torchvision.models.detection.roi_heads.project_masks_on_boxes
@@ -90,6 +92,36 @@ def multiclass_discriminator_as_loss(discriminator:DiscriminatorWithOptimizer,
     return binary_cross_entropy(l, torch.ones_like(l), reduction=reduction)
 
     
+def contextualized_discriminator_as_loss(discriminator:DiscriminatorWithOptimizer, 
+                          proposals:torch.Tensor, 
+                          targets:torch.Tensor,
+                          classes:torch.Tensor,
+                          depth:torch.Tensor,
+                          reduction:str='mean',
+                          mode='classification',):
+    '''
+    Args:
+        proposals (Tensor): [B, 3, N, H, W] tensor of predicted nocs
+            where B is batch size, 3 is for x,y,z channels, N is the
+            number of bins, and H, W are the height and width of the
+            image.
+        targets (Tensor): [B, 3, H, W] tensor of indices indicating
+            which of the binary logits is the correct nocs value.
+        classes (Tensor): [B] is a list of the class ids associated 
+            with the B targets.'''
+    
+    prediction = nocs_preprocessing_for_discriminator(proposals,
+                                                      mode)
+
+    context = None # TODO: encode classes, depth
+
+    # Train discriminator
+    discriminator.update(targets, prediction, context)
+    
+    # Get nocs loss
+    l = discriminator(prediction, context)
+    return binary_cross_entropy(l, torch.ones_like(l), reduction=reduction)
+
 
 def nocs_loss(gt_labels, 
               gt_nocs,
@@ -102,6 +134,7 @@ def nocs_loss(gt_labels,
               mode='classification', # regression or classification
               dispersion_loss=None,
               dispersion_weight=0.0,
+              depth=None
               **_):
     '''
     Calculates nocs loss. Supports cross_entropy and discriminator loss.
@@ -173,6 +206,19 @@ def nocs_loss(gt_labels,
                                                 labels,
                                                 reduction=reduction,
                                                 mode=mode)
+    elif isinstance(loss_fx, ContextAwareDiscriminator):
+        # TODO: 
+        #   - 
+
+        depth_crop = [project_on_boxes(m, p, i, W) 
+            for m, p, i in zip(depth, proposed_box_regions, matched_ids)]
+        loss = contextualized_discriminator_as_loss(loss_fx, 
+                                                proposals, 
+                                                targets, 
+                                                labels,
+                                                reduction=reduction,
+                                                mode=mode,
+                                                depth=depth_crop)
 
     if dispersion_loss is not None:
         loss += dispersion_loss(proposals, targets) * dispersion_weight
