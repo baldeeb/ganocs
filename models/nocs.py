@@ -102,7 +102,6 @@ class NOCS(MaskRCNN):
         self.roi_heads = RoIHeadsWithNocs.from_torchvision_roiheads(
                                                     self.roi_heads,
                                                     **kwargs)
-        
         self.cache = None
         
         # Update Transforms to include NOCS
@@ -131,7 +130,7 @@ class NOCS(MaskRCNN):
             original_sizes = torch.FloatTensor([img.shape[-2:] for img in images])
             new_size = self._updated_sizes(original_sizes)
             self.cache = self.transform.full_postprocess(
-                                            self.roi_heads.cache, 
+                                            self.roi_heads._cache, 
                                             new_size,
                                             original_sizes.long(),)
         return result
@@ -142,6 +141,8 @@ class NOCS(MaskRCNN):
             elif any([k in n for k in keys]): yield p
 
 
+# TODO: remove this override stuff and make it so that if a model is loaded
+# it has to match the model's config
 def get_nocs_resnet50_fpn(
     *,
     maskrcnn_weights: Optional[MaskRCNN_ResNet50_FPN_Weights] = None,
@@ -196,11 +197,4 @@ def get_nocs_resnet50_fpn(
             )
 
             model.roi_heads = RoIHeadsWithNocs.from_torchvision_roiheads(model.roi_heads, **kwargs)
-            # binsxcls = model.roi_heads.nocs_heads.num_bins * num_classes_override
-            # n = model.roi_heads.nocs_heads.head.x[1][2]
-            # in_ch, kernel_s, stride, padding = n.in_channels, n.kernel_size, n.stride, n.padding
-            # model.roi_heads.nocs_heads.head.x[1][2] = nn.Conv2d(in_ch, binsxcls, kernel_s, stride, padding)
-            # model.roi_heads.nocs_heads.head.y[1][2] = nn.Conv2d(in_ch, binsxcls, kernel_s, stride, padding)
-            # model.roi_heads.nocs_heads.head.z[1][2] = nn.Conv2d(in_ch, binsxcls, kernel_s, stride, padding)
-            # model.roi_heads.nocs_heads.num_classes = num_classes_override
     return model

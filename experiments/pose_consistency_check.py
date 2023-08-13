@@ -1,12 +1,10 @@
 import sys
 sys.path.insert(0, '/home/baldeeb/Code/pytorch-NOCS')
 
-from models.nocs import get_nocs_resnet50_fpn
 from torchvision.models.detection.mask_rcnn import MaskRCNN_ResNet50_FPN_Weights
 from torch.utils.data import DataLoader
 from utils.load_save import load_nocs
 from torch.optim import Adam
-import torch
 
 
 def targets2device(targets, device):

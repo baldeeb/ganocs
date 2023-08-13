@@ -40,7 +40,7 @@ def draw_boxes(image, scores, masks, nocs, depth, intrinsic,
     img = (image*255.0).int().permute(1,2,0).detach().cpu().numpy()
     for score, mask, nocs in zip(scores, masks, nocs):
         if score < score_threshold: continue
-        img = draw_box(img, mask > 0.5, nocs, np.array(depth), intrinsic)
+        img = draw_box(img, mask, nocs, np.array(depth), intrinsic)
     assert img is not None, 'Something went wront!'
     return img
 
@@ -61,13 +61,13 @@ def eval(model, dataloader, device, num_batches=None, log:callable=wandb.log):
                 # Calculate some eval metrics
                 loss = l2_nocs_image_loss(result['nocs'], 
                                           target['nocs'], 
-                                          result['masks'],
+                                          result['masks'] > 0.5,
                                           device=device)
                 
                 # Visualize Boxes
                 img = draw_boxes(image, 
                                  result['scores'], 
-                                 result['masks'], 
+                                 result['masks'] > 0.5, 
                                  result['nocs'], 
                                  target['depth'], 
                                  target['intrinsics'], 

@@ -7,11 +7,11 @@ class NocsHeads(nn.Module):
     '''Derived from torchvision.models.detection.mask_rcnn.(MaskRCNNHeads, MaskRCNNPredictor)'''
     def __init__(self, 
                  in_channels, 
-                 layers, 
-                 num_classes,
-                 num_bins,
+                 layers=(256, 256, 256, 256, 256), 
+                 num_classes=91,
+                 num_bins=32,
                  keys=['x', 'y', 'z'], 
-                 multiheaded=False,
+                 multiheaded=True,
                  norm_layer: Optional[Callable[..., nn.Module]] = nn.BatchNorm2d,
                  mode: str = 'classification',  # 'classification' or 'regression'
                  ):
