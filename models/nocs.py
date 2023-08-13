@@ -148,7 +148,6 @@ def get_nocs_resnet50_fpn(
     maskrcnn_weights: Optional[MaskRCNN_ResNet50_FPN_Weights] = None,
     progress: bool = True,
     num_classes: Optional[int] = None,
-    override_num_classes: bool = False,
     weights_backbone: Optional[ResNet50_Weights] = ResNet50_Weights.IMAGENET1K_V1,
     trainable_backbone_layers: Optional[int] = None,
     **kwargs: Any,
@@ -158,20 +157,18 @@ def get_nocs_resnet50_fpn(
 
     if maskrcnn_weights is not None:
         weights_backbone = None
-        try:
-            num_classes = _ovewrite_value_param("num_classes", num_classes, 
-                                                len(maskrcnn_weights.meta["categories"]))
-            override_num_classes = False
-            num_classes_override = num_classes
-        except ValueError as e:
-            if not override_num_classes: 
-                raise e
-            else: 
-                num_classes_override = int(num_classes)
-                num_classes = len(maskrcnn_weights.meta["categories"])
+        loaded_num_classes = len(maskrcnn_weights.meta["categories"])
+        if num_classes is not None:
+            if int(num_classes) != loaded_num_classes:
+                print('WARNING: The num_classes provided does not match the loaded weights.')
+                print('Adjusting model heads to remedy this...')
+                override_num_classes = True
+            else:
+                override_num_classes = False
+        else: 
+            num_classes = loaded_num_classes
     elif num_classes is None:
-        num_classes = 91
-        override_num_classes = False
+        raise RuntimeError('Model needs explicit num_classes or a set of weights to infer it from.')
 
     is_trained = maskrcnn_weights is not None or weights_backbone is not None
     trainable_backbone_layers = _validate_trainable_layers(is_trained, trainable_backbone_layers, 5, 3)
@@ -179,7 +176,7 @@ def get_nocs_resnet50_fpn(
 
     backbone = resnet50(weights=weights_backbone, progress=progress, norm_layer=norm_layer)
     backbone = _resnet_fpn_extractor(backbone, trainable_backbone_layers)
-    model = NOCS(backbone, num_classes=num_classes, **kwargs)
+    model = NOCS(backbone, num_classes=loaded_num_classes, **kwargs)
 
     if maskrcnn_weights is not None:
         model.load_state_dict(maskrcnn_weights.get_state_dict(progress=progress), 
@@ -189,11 +186,11 @@ def get_nocs_resnet50_fpn(
 
         if override_num_classes:
             model.roi_heads.box_predictor.cls_score = nn.Linear(
-                model.roi_heads.box_predictor.cls_score.in_features, num_classes_override
+                model.roi_heads.box_predictor.cls_score.in_features, num_classes
             )
-            model.roi_heads.box_predictor.num_classes = num_classes_override
+            model.roi_heads.box_predictor.num_classes = num_classes
             model.roi_heads.mask_predictor.mask_fcn_logits = nn.Conv2d(
-                model.roi_heads.mask_predictor.mask_fcn_logits.in_channels, num_classes_override, 1, 1, 0
+                model.roi_heads.mask_predictor.mask_fcn_logits.in_channels, num_classes, 1, 1, 0
             )
 
             model.roi_heads = RoIHeadsWithNocs.from_torchvision_roiheads(model.roi_heads, **kwargs)
