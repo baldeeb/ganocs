@@ -134,7 +134,7 @@ def nocs_loss(gt_labels,
               mode='classification', # regression or classification
               dispersion_loss=None,
               dispersion_weight=0.0,
-              depth=None
+              depth=None,
               **_):
     '''
     Calculates nocs loss. Supports cross_entropy and discriminator loss.
