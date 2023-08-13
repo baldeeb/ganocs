@@ -217,7 +217,7 @@ class RoIHeadsWithNocs(RoIHeads):
                                                        reduction=reduction,
                                                        loss_fx=self.nocs_loss,
                                                        mode=self.nocs_loss_mode,
-                                                       depth=depth
+                                                       depth=depth,
                                                        **self._kwargs)
                     
                     if self.cache_results:
