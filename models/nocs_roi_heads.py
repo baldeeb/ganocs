@@ -38,14 +38,13 @@ class RoIHeadsWithNocs(RoIHeads):
         # Keypoint
         keypoint_roi_pool=None, keypoint_head=None, keypoint_predictor=None,
         # NOCS
-        in_channels:int     = 256, 
-        num_bins:int        = 32,  # set to 1 for regression
-        num_classes:int     = 91, 
-        nocs_layers:List[int] = (256, 256, 256, 256, 256),
         cache_results:bool  = False,  # retains results at training
-        nocs_loss=torch.nn.functional.cross_entropy,  # can be cross entropy or discriminator
+        nocs_heads = None,
+        
+        # TODO: These should be owned by the NOCS head.
         nocs_loss_mode:str  = 'classification',  # regression, classification
-        multiheaded_nocs:bool = True,
+        nocs_loss=torch.nn.functional.cross_entropy,  # can be cross entropy or discriminator
+
         # Others
         **kwargs,
     ):
@@ -62,14 +61,17 @@ class RoIHeadsWithNocs(RoIHeads):
             keypoint_roi_pool, keypoint_head, keypoint_predictor,
         )
 
-        self.cache_results, self.cache = cache_results, None
-        self.nocs_loss_mode = nocs_loss_mode
 
-        self.nocs_heads = NocsHeads(in_channels, nocs_layers,
-                                    num_classes, num_bins,
-                                    keys=['x', 'y', 'z'],
-                                    multiheaded=multiheaded_nocs,
-                                    mode=nocs_loss_mode)
+        # self.nocs_heads = NocsHeads(in_channels, nocs_layers,
+        #                             num_classes, num_bins,
+        #                             keys=['x', 'y', 'z'],
+        #                             multiheaded=multiheaded_nocs,
+        #                             mode=nocs_loss_mode)
+        self.nocs_heads = nocs_heads
+
+        
+        self.cache_results, self._cache = cache_results, None
+        self.nocs_loss_mode = nocs_loss_mode
         self.ignore_nocs = False
         self.nocs_loss = nocs_loss
         self._kwargs = kwargs
@@ -249,7 +251,7 @@ class RoIHeadsWithNocs(RoIHeads):
             and self.keypoint_predictor is not None):
             self._run_keypoint_head(result, targets, losses, proposals, matched_idxs, labels, features, image_shapes)
 
-        if self.cache_results and self.training: self.cache = result
+        if self.cache_results and self.training: self._cache = result
         return result, losses
     
 
@@ -354,11 +356,21 @@ class RoIHeadsWithNocs(RoIHeads):
 
     @staticmethod
     def from_torchvision_roiheads(heads:RoIHeads, 
-                                  nocs_num_bins=32, 
                                   **kwargs):
         '''Returns RoIHeadsWithNocs given an RoIHeads instance.'''
-        nocs_ch_in = heads.mask_head[0][0].in_channels
-        num_classes = heads.mask_predictor.mask_fcn_logits.out_channels
+        nocs_kwargs = {
+            'in_channels':heads.mask_head[0][0].in_channels,
+            'num_classes':heads.mask_predictor.mask_fcn_logits.out_channels
+        }
+        keys_map = {'nocs_layers'       :'layers',
+                    'nocs_num_bins'     :'num_bins',
+                    'multiheaded_nocs'  :'multiheaded',
+                    'nocs_keys'         :'keys',
+                    'nocs_loss_mode'    :'mode',}
+        for k,v in keys_map.items():
+            if k in kwargs: nocs_kwargs[v]=kwargs[k]
+        nocs_heads = NocsHeads(**nocs_kwargs)
+
         return RoIHeadsWithNocs(
             heads.box_roi_pool, heads.box_head, heads.box_predictor,
             heads.proposal_matcher.high_threshold, heads.proposal_matcher.low_threshold,
@@ -367,6 +379,6 @@ class RoIHeadsWithNocs(RoIHeads):
             heads.score_thresh, heads.nms_thresh, heads.detections_per_img,
             heads.mask_roi_pool, heads.mask_head, heads.mask_predictor, 
             heads.keypoint_roi_pool, heads.keypoint_head, heads.keypoint_predictor,
-            in_channels=nocs_ch_in, num_bins=nocs_num_bins, num_classes=num_classes,
+            nocs_heads=nocs_heads,
             **kwargs
         )
