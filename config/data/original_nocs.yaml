@@ -40,6 +40,7 @@ batch_size_all: 10
 training:
   _target_: datasets.original_nocs.multiloader.NOCSMultiDatasetLoader
   batch_size: ${data.batch_size_all}
+  steps_per_epoch: 2000
 
   # TODO: move this to the datasets.
   # dataset_priorities: [1.0]  

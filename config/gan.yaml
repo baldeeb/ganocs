@@ -6,8 +6,11 @@ defaults:
   - _self_
 
 run_name:     gan
-device:       cuda:0
+device:       cuda:1
 log:          True
+
+num_epochs: 200
+num_eval_batches: 1
 
 model:
   num_classes: 10
