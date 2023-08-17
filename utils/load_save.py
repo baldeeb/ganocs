@@ -2,13 +2,15 @@ import pathlib as pl
 import os
 import torch
 from models.nocs import get_nocs_resnet50_fpn
+import logging
 
 def save_model(model, path):
     path = pl.Path(path)
     if not path.parent.exists():
         os.makedirs(path.parent)
     torch.save(model.state_dict(), path)
-
+    logging.debug(f"Saved model to: {path}")
+        
 def load_nocs(checkpoint, **kwargs):
     # TODO: move this to a utils function
     path = pl.Path(checkpoint)

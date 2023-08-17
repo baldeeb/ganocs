@@ -22,7 +22,7 @@ def calculate_2d_projections(coordinates_3d, intrinsics):
         projected_coordinates: [N, 2]
     """
     projected_coordinates = intrinsics @ coordinates_3d
-    projected_coordinates = projected_coordinates[:2, :] / projected_coordinates[2, :]
+    projected_coordinates = projected_coordinates[:2, :] / (projected_coordinates[2, :] + 1e-6)
     projected_coordinates = projected_coordinates.transpose()
     projected_coordinates = np.array(projected_coordinates, dtype=np.int32)
     return projected_coordinates

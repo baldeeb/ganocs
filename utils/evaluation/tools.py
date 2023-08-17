@@ -56,7 +56,7 @@ def transform_coordinates_3d(coordinates, RT):
     assert coordinates.shape[0] == 3
     coordinates = np.vstack([coordinates, np.ones((1, coordinates.shape[1]), dtype=np.float32)])
     new_coordinates = RT @ coordinates
-    new_coordinates = new_coordinates[:3, :]/new_coordinates[3, :]
+    new_coordinates = new_coordinates[:3, :] / (new_coordinates[3, :] + 1e-6)
     return new_coordinates
 
 
