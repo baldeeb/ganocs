@@ -1,17 +1,8 @@
 import torch
 import numpy as np
 
-# Load data    
+# TODO: return numpy arrays instead of torch tensors
 def collate_fn(batch):
-    # def img2tensor(key):
-    #     im = np.array([v[0][key]/255.0 for v in batch])
-    #     return torch.as_tensor(im).permute(0, 3, 1, 2).float()
-    # # rgb = np.array([v[0]['image']/255.0 for v in batch])
-    # # rgb = torch.as_tensor(rgb).permute(0, 3, 1, 2).float()
-    # rgb = img2tensor('image')
-    # nocs = img2tensor('nocs')
-
-    # rgb = [torch.as_tensor(v[0].copy()).permute(2, 0, 1) for v in batch]
     rgb = []
     targets = []
     for i, data in enumerate(batch):
@@ -21,10 +12,10 @@ def collate_fn(batch):
         labels          = torch.as_tensor(data[3])
         b               = torch.as_tensor(data[4])[:, :4].float()  # 5 dim, last dim might be class or anchor
         boxes           = torch.stack([b[:, 1], b[:, 0], b[:, 3], b[:, 2]], dim=1) # width min, height min, width max, height max
-        # boxes           = b
         masks           = torch.as_tensor(data[5]).permute(2, 0, 1).bool()
         nocs            = torch.as_tensor(data[6]).float().sum(dim=2).permute(2, 0, 1)
-        
+        scales          = torch.as_tensor(data[7]).float()
+
         if len(labels.shape) == 0 or labels.shape[0] == 0: 
             raise RuntimeError(f'Warning: collate called on data with no labels.')
 
@@ -36,6 +27,7 @@ def collate_fn(batch):
             'nocs': nocs,
             'labels': labels, 
             'boxes': boxes, 
+            'scales': scales,
             'camera_pose': None,
             'intrinsics': intrinsics,
         })

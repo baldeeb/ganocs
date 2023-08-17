@@ -1,6 +1,6 @@
 from omegaconf import DictConfig
 from torch.utils.data import DataLoader
-from .datagen import Dataset
+from .dataset_wrapper import Dataset
 from .dataset import BadDataException
 import torch
 import logging
