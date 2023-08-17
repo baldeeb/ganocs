@@ -12,7 +12,7 @@ from torchvision.models.detection._utils import overwrite_eps
 from torchvision.models.resnet import resnet50, ResNet50_Weights
 from torchvision.models._utils import _ovewrite_value_param
 from torchvision.ops import misc as misc_nn_ops
-
+import logging
 
 class NOCS(MaskRCNN):
     def __init__(
@@ -114,6 +114,16 @@ class NOCS(MaskRCNN):
                                             image_mean=image_mean, 
                                             image_std=image_std, 
                                             **kwargs)
+        self.rpn_nms_thresh = rpn_nms_thresh
+        self.rpn_score_thresh = rpn_score_thresh
+        
+        # TODO:
+        self.eval_rpn_nms_thresh = 0.3
+        self.eval_rpn_score_thresh = 0.7
+        # self.eval_rpn_nms_thresh = kwargs.get('eval_rpn_nms_thresh',
+        #                                       rpn_nms_thresh)
+        # self.eval_rpn_score_thresh = kwargs.get('eval_rpn_score_thresh',
+        #                                         rpn_score_thresh)
     
     def _updated_sizes(self, s):
         if isinstance(s, list): 
@@ -141,6 +151,16 @@ class NOCS(MaskRCNN):
             elif any([k in n for k in keys]): yield p
 
 
+    def train(self, mode: bool = True):
+        MaskRCNN.train(self, mode)
+        if mode is True:
+            self.roi_heads.nms_thresh = self.rpn_nms_thresh
+            self.roi_heads.score_thresh = self.rpn_score_thresh
+        else:
+            self.roi_heads.nms_thresh = self.eval_rpn_nms_thresh
+            self.roi_heads.score_thresh = self.eval_rpn_score_thresh
+        return self
+
 # TODO: remove this override stuff and make it so that if a model is loaded
 # it has to match the model's config
 def get_nocs_resnet50_fpn(
@@ -160,8 +180,9 @@ def get_nocs_resnet50_fpn(
         loaded_num_classes = len(maskrcnn_weights.meta["categories"])
         if num_classes is not None:
             if int(num_classes) != loaded_num_classes:
-                print('WARNING: The num_classes provided does not match the loaded weights.')
-                print('Adjusting model heads to remedy this...')
+                logging.info('WARNING: The num_classes provided does not ' +
+                            'match the loaded weights. ' +
+                            'Adjusting model heads to remedy this...')
                 override_num_classes = True
             else:
                 override_num_classes = False

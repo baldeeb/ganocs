@@ -2,52 +2,57 @@ import torch
 import numpy as np  
 import wandb
 from utils.evaluation.nocs_image_loss import l2_nocs_image_loss
+from utils.evaluation.tools import iou
 from utils.visualization import draw_3d_boxes
 from utils.align import align
+from torchvision.utils import draw_segmentation_masks, draw_bounding_boxes
 
-def merge_nocs_to_single_image(nocs, masks, scores, 
-                               score_threshold=0.5, 
-                               overlap_threshold=0.1):
+
+
+def merge_masks(masks, overlap_threshold=0.5):
+    merged_mask = torch.zeros_like(masks[0])
+    for m in masks:
+        if overlap_threshold and (merged_mask * m).sum() > (m.sum() * overlap_threshold): continue
+        merged_mask += m
+
+def merge_nocs_to_single_image(nocs, masks=None, overlap_threshold=0.1):
     '''
     Args:
         nocs: (B, 3, H, W)
         masks: (B, 1, H, W)
         scores: (B,)
-        score_threshold: (float) minimum scores cosidered.
+        # score_threshold: (float) minimum scores cosidered.
         overlap_threshold: (float) maximum overlap between boxes. 
             Boxes are process in order of score.
     '''
     nocs = nocs.permute(0,2,3,1)
-    masks = masks.permute(0,2,3,1)
-
-    # sort by score
-    scores, indices = torch.sort(scores, descending=True)
-    nocs = nocs[indices]; masks = masks[indices]
-
-    merged = torch.zeros_like(nocs[0])
-    merged_mask = torch.zeros_like(masks[0])
-    for n, m, s in zip(nocs, masks, scores):
-        if score_threshold and s < score_threshold: break
-        if overlap_threshold and (merged_mask * m).sum() > (m.sum() * overlap_threshold):  continue
-        merged_mask += m
-        merged += n * m
+    if masks is not None: 
+        masks = masks.permute(0,2,3,1)
+        merged = torch.zeros_like(nocs[0])
+        merged_mask = torch.zeros_like(masks[0])
+        for n, m in zip(nocs, masks):
+            if overlap_threshold and \
+               (merged_mask * m).sum() > (m.sum() * overlap_threshold): 
+                continue
+            merged_mask += m
+            merged += n * m
+    else: 
+        merged = torch.cat([n for n in nocs]).sum(dim=0) 
     
     return (merged.clone().detach() * 255.0).int().cpu().numpy()
 
 
-def draw_boxes(image, scores, masks, nocs, depth, intrinsic,
-               score_threshold=0.9):
+def draw_boxes(image, masks, nocs, depth, intrinsic):
     img = (image*255.0).int().permute(1,2,0).detach().cpu().numpy()
-    for score, mask, nocs in zip(scores, masks, nocs):
-        if score < score_threshold: continue
+    for mask, nocs in zip( masks, nocs):
         img = draw_box(img, mask, nocs, np.array(depth), intrinsic)
     assert img is not None, 'Something went wront!'
     return img
 
 def eval(model, dataloader, device, num_batches=None, log:callable=wandb.log):
     with torch.no_grad():
+        det_keys = ['nocs', 'masks', 'labels', 'boxes', 'scores']
         score_threshold = 0.8
-
         model_training = model.training
         model.eval()
         for batch_i, (images, targets) in enumerate(dataloader):
@@ -55,35 +60,47 @@ def eval(model, dataloader, device, num_batches=None, log:callable=wandb.log):
             results = model(images)
             
             for result, image, target in zip(results, images, targets):
-                if result['scores'].shape[0] == 0: # not objects detected
-                    continue
 
-                # Calculate some eval metrics
-                loss = l2_nocs_image_loss(result['nocs'], 
-                                          target['nocs'], 
-                                          result['masks'] > 0.5,
-                                          device=device)
+                # Discard samples with low score
+                # TODO: determine if this ought to be done in the model
+                #       when using eval mode.
+                select = result['scores'] > score_threshold
+                if not any(select): continue
+                for k in det_keys: result[k] = result[k][select]
+
+                binary_masks = result['masks'] > 0.5
+
+                # l2 nocs loss
+                loss = l2_nocs_image_loss(result['nocs'], target['nocs'], 
+                                          binary_masks, device=device)
                 
-                # Visualize Boxes
-                img = draw_boxes(image, 
-                                 result['scores'], 
-                                 result['masks'] > 0.5, 
-                                 result['nocs'], 
-                                 target['depth'], 
-                                 target['intrinsics'], 
-                                 score_threshold)
+                # 3d boxes
+                img = draw_boxes(image, binary_masks, result['nocs'], 
+                                 target['depth'], target['intrinsics'],)
                 
-                # Visualize NOCS
-                cumm_nocs = merge_nocs_to_single_image(result['nocs'], 
-                                                       result['masks'] > 0.5, 
-                                                       result['scores'], 
-                                                       score_threshold=score_threshold)
+                # nocs images
+                cumm_nocs = merge_nocs_to_single_image(result['nocs'], binary_masks, )
+                gt_nocs = target['nocs'].clone().detach().numpy().astype(int).transpose(1,2,0)
+
+                # segmentation and 2d boxes
+                int_image = (image.clone().detach() * 255.0).type(torch.uint8).cpu()
+                seged_img = draw_segmentation_masks(int_image, binary_masks.squeeze(1).clone().detach().cpu(), alpha=0.6)
+                seged_img = seged_img.permute(1,2,0).clone().detach().numpy().astype(int)
+                boxes_img = draw_bounding_boxes(int_image, boxes=result['boxes'], width=4)
+                boxes_img = boxes_img.permute(1,2,0).clone().detach().numpy().astype(int)
                 
+                # IoU
+                IoUs = []
+                for g, p in zip(target['boxes'][select], result['boxes'][select]):            
+                    IoUs.append(iou(g, p, ))
+
                 log({
-                    'eval_nocs_loss':   loss,
-                    'image':            wandb.Image(img),
-                    'pred_nocs':        wandb.Image(cumm_nocs),
-                    'gt_nocs':          target['nocs'],
+                    'eval_nocs_loss':    loss,
+                    'image':             wandb.Image(img),
+                    'pred_nocs':         wandb.Image(cumm_nocs),
+                    'gt_nocs':           wandb.Image(gt_nocs),
+                    'pred_segmentation': wandb.Image(seged_img),
+                    'pred_boxes':        wandb.Image(boxes_img),
                 })
             if num_batches is not None and batch_i >= num_batches: break
         if model_training: model.train()

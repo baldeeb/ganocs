@@ -53,29 +53,37 @@ training:
     _target_: hydra.utils.get_method
     path: datasets.original_nocs.collate_tools.collate_fn
 
+  dataloader:
+    _target_: datasets.original_nocs.dataset.NOCSData
+    synset_names: ${data.synset_names}
+    subset: 'train'
+    config: ${data.common_configs}
+    intrinsics: [[591.0125, 0, 322.525], [0, 590.16775, 244.11084], [0, 0, 1]]
+    depth_scale: 0.001  # mm to m
+
   datasets:
     real:
       type: real
-      loader:
-        _target_: datasets.original_nocs.dataset.NOCSData
-        synset_names: ${data.synset_names}
-        subset: 'train'
-        config: ${data.common_configs}
-        intrinsics: [[591.0125, 0, 322.525], [0, 590.16775, 244.11084], [0, 0, 1]]
-        depth_scale: 0.001  # mm to m
+      # loader:
+        # _target_: datasets.original_nocs.dataset.NOCSData
+        # synset_names: ${data.synset_names}
+        # subset: 'train'
+        # config: ${data.common_configs}
+        # intrinsics: [[591.0125, 0, 322.525], [0, 590.16775, 244.11084], [0, 0, 1]]
+        # depth_scale: 0.001  # mm to m
       dataset_dir: ${data.real_dir}
       class_map: ${data.class_map}
       shuffle: ${data.training.shuffle}
       augment: ${data.training.augment}
     camera:
       type: synthetic
-      loader:
-        _target_: datasets.original_nocs.dataset.NOCSData
-        synset_names: ${data.synset_names}
-        subset: 'train'
-        config: ${data.common_configs}
-        intrinsics: [[577.5, 0, 319.5], [0., 577.5, 239.5], [0., 0., 1.]]
-        depth_scale: 0.001  # mm to m
+      # loader:
+      #   _target_: datasets.original_nocs.dataset.NOCSData
+      #   synset_names: ${data.synset_names}
+      #   subset: 'train'
+      #   config: ${data.common_configs}
+      #   intrinsics: [[577.5, 0, 319.5], [0., 577.5, 239.5], [0., 0., 1.]]
+      #   depth_scale: 0.001  # mm to m
       dataset_dir: ${data.camera_dir}
       class_map: ${data.class_map}
       shuffle: ${data.training.shuffle}
