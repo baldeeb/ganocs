@@ -16,6 +16,7 @@ class_map :
 
 camera_dir: ./data/original_nocs_data/camera
 real_dir:   ./data/original_nocs_data/real
+coco_dir:   ./data/original_nocs_data/coco
 
 common_configs:
   #################################################################################################################################
@@ -38,83 +39,65 @@ common_configs:
 batch_size_all: 10
 
 training:
-  _target_: datasets.original_nocs.multiloader.NOCSMultiDatasetLoader
+  _target_: datasets.original_nocs.dataset_wrapper.NOCSDataloader
+  
   batch_size: ${data.batch_size_all}
   steps_per_epoch: 2000
-
-  # TODO: move this to the datasets.
-  # dataset_priorities: [1.0]  
-  dataset_priorities: [0.4, 0.6]  # Should be the same length as datasets
-                                  # Is used as multinomial weights for sampling
   augment: True
   shuffle: True
+  class_map: ${data.class_map}
 
   collate: 
     _target_: hydra.utils.get_method
     path: datasets.original_nocs.collate_tools.collate_fn
 
-  dataloader:
-    _target_: datasets.original_nocs.dataset.NOCSData
+  dataset:
+    config: ${data.common_configs}
+    _target_: datasets.original_nocs.dataset.NOCSDataset
     synset_names: ${data.synset_names}
     subset: 'train'
-    config: ${data.common_configs}
     intrinsics: [[591.0125, 0, 322.525], [0, 590.16775, 244.11084], [0, 0, 1]]
     depth_scale: 0.001  # mm to m
-
-  datasets:
-    real:
-      type: real
-      # loader:
-        # _target_: datasets.original_nocs.dataset.NOCSData
-        # synset_names: ${data.synset_names}
-        # subset: 'train'
-        # config: ${data.common_configs}
-        # intrinsics: [[591.0125, 0, 322.525], [0, 590.16775, 244.11084], [0, 0, 1]]
-        # depth_scale: 0.001  # mm to m
+    
+  data_info: 
+    Real:
       dataset_dir: ${data.real_dir}
-      class_map: ${data.class_map}
-      shuffle: ${data.training.shuffle}
-      augment: ${data.training.augment}
-    camera:
-      type: synthetic
-      # loader:
-      #   _target_: datasets.original_nocs.dataset.NOCSData
-      #   synset_names: ${data.synset_names}
-      #   subset: 'train'
-      #   config: ${data.common_configs}
-      #   intrinsics: [[577.5, 0, 319.5], [0., 577.5, 239.5], [0., 0., 1.]]
-      #   depth_scale: 0.001  # mm to m
+      weight: 3 
+    CAMERA:
       dataset_dir: ${data.camera_dir}
-      class_map: ${data.class_map}
-      shuffle: ${data.training.shuffle}
-      augment: ${data.training.augment}
+      weight: 1
+    coco:
+      dataset_dir: ${data.coco_dir}
+      weight: 1
 
-testing:
-  _target_: datasets.original_nocs.multiloader.NOCSMultiDatasetLoader
-  batch_size: ${data.batch_size_all}
-  dataset_priorities: [1.0]  # Should be the same length as datasets
-                           # Is used as multinomial weights for sampling
-  augment: True
-  shuffle: True
 
-  collate: 
-    _target_: hydra.utils.get_method
-    path: datasets.original_nocs.collate_tools.collate_fn
 
-  datasets:
-    camera:
-      type: synthetic
-      loader:
-        _target_: datasets.original_nocs.dataset.NOCSData
-        synset_names: ${data.synset_names}
-        subset: 'val'
-        config: ${data.common_configs}
-        intrinsics: [[577.5, 0, 319.5], [0., 577.5, 239.5], [0., 0., 1.]]
-        depth_scale: 0.001  # mm to m
-      dataset_dir: ${data.camera_dir}
-      class_map: ${data.class_map}
-      shuffle: ${data.training.shuffle}
-      augment: ${data.training.augment}
+# testing:
+#   _target_: datasets.datasets.original_nocs.dataset_wrapper.multiloader.NOCSMultiDatasetLoader
+#   batch_size: ${data.batch_size_all}
+#   dataset_priorities: [1.0]  # Should be the same length as datasets
+#                            # Is used as multinomial weights for sampling
+#   augment: True
+#   shuffle: True
+
+#   collate: 
+#     _target_: hydra.utils.get_method
+#     path: datasets.original_nocs.collate_tools.collate_fn
+
+#   datasets:
+#     camera:
+#       type: synthetic
+#       loader:
+#         _target_: datasets.original_nocs.dataset.NOCSData
+#         synset_names: ${data.synset_names}
+#         subset: 'val'
+#         config: ${data.common_configs}
+#         intrinsics: [[577.5, 0, 319.5], [0., 577.5, 239.5], [0., 0., 1.]]
+#         depth_scale: 0.001  # mm to m
+#       dataset_dir: ${data.camera_dir}
+#       class_map: ${data.class_map}
+#       shuffle: ${data.training.shuffle}
+#       augment: ${data.training.augment}
 
 
 

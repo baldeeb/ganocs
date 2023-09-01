@@ -5,7 +5,7 @@ import numpy as np
 def collate_fn(batch):
     rgb = []
     targets = []
-    for i, data in enumerate(batch):
+    for _, data in enumerate(batch):
 
         depth           = torch.as_tensor(data[1]).float()
         intrinsics      = torch.as_tensor(data[2]).float()
@@ -14,7 +14,8 @@ def collate_fn(batch):
         boxes           = torch.stack([b[:, 1], b[:, 0], b[:, 3], b[:, 2]], dim=1) # width min, height min, width max, height max
         masks           = torch.as_tensor(data[5]).permute(2, 0, 1).bool()
         nocs            = torch.as_tensor(data[6]).float().sum(dim=2).permute(2, 0, 1)
-        scales          = torch.as_tensor(data[7]).float()
+        ignore_nocs     = torch.as_tensor(data[7]).float()
+        scales          = torch.as_tensor(data[8]).float()
 
         if len(labels.shape) == 0 or labels.shape[0] == 0: 
             raise RuntimeError(f'Warning: collate called on data with no labels.')
@@ -30,7 +31,8 @@ def collate_fn(batch):
             'scales': scales,
             'camera_pose': None,
             'intrinsics': intrinsics,
+            'ignore_nocs': ignore_nocs,
         })
 
-    rgb = torch.stack(rgb, dim=0).float()
+    # rgb = torch.stack(rgb, dim=0).float()
     return rgb, targets
