@@ -56,7 +56,7 @@ def eval(model, dataloader, device, num_batches=None, log:callable=wandb.log):
         model_training = model.training
         model.eval()
         for batch_i, (images, targets) in enumerate(dataloader):
-            images = images.to(device)
+            images = [img.to(device) for img in images]
             results = model(images)
             
             for result, image, target in zip(results, images, targets):
@@ -89,10 +89,10 @@ def eval(model, dataloader, device, num_batches=None, log:callable=wandb.log):
                 boxes_img = draw_bounding_boxes(int_image, boxes=result['boxes'], width=4)
                 boxes_img = boxes_img.permute(1,2,0).clone().detach().numpy().astype(int)
                 
-                # IoU
-                IoUs = []
-                for g, p in zip(target['boxes'][select], result['boxes'][select]):            
-                    IoUs.append(iou(g, p, ))
+                # # IoU
+                # IoUs = []
+                # for g, p in zip(target['boxes'][select], result['boxes'][select]):            
+                #     IoUs.append(iou(g, p, ))
 
                 log({
                     'eval_nocs_loss':    loss,

@@ -4,13 +4,18 @@ defaults:
   - optimization: base
   - _self_
 
-project_name: nocs_with_multiview_consistency
-run_name:     basic
-num_epochs: 5
-batches_before_eval: 50
-checkpoint_dir: ./checkpoints/nocs_classification/${now:%Y-%m-%d_%H-%M-%S}
-device: cuda:0
-log: true
-batches_before_save: 500
+project_name: NOCS
+run_name:     base
 
-num_eval_batches: 10
+device: cuda:0
+checkpoint_dir: ./checkpoints/nocs_classification/${now:%Y-%m-%d_%H-%M-%S}
+log: true                 # Whether to push logs to wandb
+
+num_epochs: 5             # Number of epochs to train for
+batches_before_save: 500  # Number of batches before saving a checkpoint
+batches_before_eval: 50   # Number of batches before evaluating
+num_eval_batches: 5      # Number of batches to evaluate on
+
+hydra:
+    run:
+        dir: outputs/${project_name}/${run_name}/${now:%Y-%m-%d_%H-%M-%S}

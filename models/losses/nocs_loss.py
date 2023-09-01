@@ -207,9 +207,6 @@ def nocs_loss(gt_labels,
                                                 reduction=reduction,
                                                 mode=mode)
     elif isinstance(loss_fx, ContextAwareDiscriminator):
-        # TODO: 
-        #   - 
-
         depth_crop = [project_on_boxes(m, p, i, W) 
             for m, p, i in zip(depth, proposed_box_regions, matched_ids)]
         loss = contextualized_discriminator_as_loss(loss_fx, 

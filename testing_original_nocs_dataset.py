@@ -148,8 +148,8 @@ import torch
 @hydra.main(version_base=None, config_path="./config", config_name="original_data")
 def visualize_data(cfg: DictConfig):
     datasets = {
+        'testing': hydra.utils.instantiate(cfg.data.testing),
         'training': hydra.utils.instantiate(cfg.data.training),
-        # 'testing': hydra.utils.instantiate(cfg.data.testing),
         # 'habitat': hydra.utils.instantiate(cfg.data.base),
     }
 

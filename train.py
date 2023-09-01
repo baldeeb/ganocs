@@ -66,7 +66,7 @@ def run(cfg: DictConfig) -> None:
                                                total=int(len(training_dataloader)
                                                          /training_dataloader.batch_size),
                                                leave=False, desc='Batch'):
-            images = images.to(cfg.device)
+            images = [im.to(cfg.device) for im in images]
             targets = targets2device(targets, cfg.device)       # TODO: Discard and pass device to collate_fn
             
             losses = model(images, targets)                     # Forward pass

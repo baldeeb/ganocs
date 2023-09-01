@@ -2,7 +2,7 @@
 Copied from the original NOCS work with very minor changes.
 '''
 
-import utils
+from . import utils
 import os
 import numpy as np
 from pycocotools.coco import COCO
@@ -26,7 +26,7 @@ class BadDataException(Exception):
 class NOCSDataset(utils.Dataset):
     """Generates the NOCS dataset."""
 
-    def __init__(self, synset_names, subset, config, intrinsics=None, depth_scale=None):
+    def __init__(self, synset_names, subset, config, intrinsics=None, depth_scale=None, verbose=False):
         self._image_ids = []
         self.image_info = []
         # Background is always the first class
@@ -47,6 +47,9 @@ class NOCSDataset(utils.Dataset):
             if i == 0:  ## class 0 is bg class
                 continue
             self.add_class("BG", i, obj_name)  ## class id starts with 1
+        
+        self._verbose = verbose
+
 
     def load_habitat_scenes(self, dataset_dir):
         """Load the habitat image dataset
@@ -95,7 +98,7 @@ class NOCSDataset(utils.Dataset):
                 image_id += 1
         num_images_after_load = len(self.image_info)
         self.source_image_ids[source] = np.arange(num_images_before_load, num_images_after_load)
-        print('{} images are loaded into the dataset from {}.'.format(num_images_after_load - num_images_before_load, source))
+        if self._verbose: print('{} images are loaded into the dataset from {}.'.format(num_images_after_load - num_images_before_load, source))
 
     def load_camera_scenes(self, dataset_dir, if_calculate_mean=False):
         """Load a subset of the CAMERA dataset.
@@ -216,7 +219,7 @@ class NOCSDataset(utils.Dataset):
 
         num_images_after_load = len(self.image_info)
         self.source_image_ids[source] = np.arange(num_images_before_load, num_images_after_load)
-        print('{} images are loaded into the dataset from {}.'.format(num_images_after_load - num_images_before_load, source))
+        if self._verbose: print('{} images are loaded into the dataset from {}.'.format(num_images_after_load - num_images_before_load, source))
 
 
     def load_coco(self, dataset_dir, subset, class_names):
@@ -253,7 +256,7 @@ class NOCSDataset(utils.Dataset):
         # Add classes
         for cls_id in class_ids:
             self.add_class("coco", cls_id, coco.loadCats(cls_id)[0]["name"])
-            print('Add coco class: '+coco.loadCats(cls_id)[0]["name"])
+            if self._verbose: print('Add coco class: '+coco.loadCats(cls_id)[0]["name"])
 
         # Add images
         num_existing_images = len(self.image_info)
@@ -268,7 +271,7 @@ class NOCSDataset(utils.Dataset):
 
         num_images_after_load = len(self.image_info)
         self.source_image_ids[source] = np.arange(num_images_before_load, num_images_after_load)
-        print('{} images are loaded into the dataset from {}.'.format(num_images_after_load - num_images_before_load, source))
+        if self._verbose: print('{} images are loaded into the dataset from {}.'.format(num_images_after_load - num_images_before_load, source))
 
 
 

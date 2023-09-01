@@ -18,7 +18,9 @@ class NOCSDataloader():
         self._steps_per_epoch = kwargs.get('steps_per_epoch', None)
         self.augment = kwargs.get('augment', False)
         
-    
+    @property
+    def batch_size(self): return self._batch_size
+
     def _load_data(self, data_info, class_map):
         self._sources, self._source_weights = [], []
         for k, v in data_info.items(): 

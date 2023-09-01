@@ -1,3 +1,15 @@
+'''NOTE: This file is heavily based off of the ROIHeads class from torchvision.
+
+Things to explain: 
+    - Cache results: When experimenting with multiview consistency, it is useful
+        to cache the results (not just losses) in the forward pass. This allows 
+        us to calculate the consistency loss post forward pass.
+    - 'no_nocs': This is a flag that can be set in the targets. If set, the
+        nocs loss is not calculated for that object. This is useful when
+        the data used does not have information to supervise nocs but is useful
+        for other parts (mask, box, etc).
+'''
+
 from typing import List, Optional, Tuple, Dict
 
 import torch 
@@ -61,15 +73,7 @@ class RoIHeadsWithNocs(RoIHeads):
             keypoint_roi_pool, keypoint_head, keypoint_predictor,
         )
 
-
-        # self.nocs_heads = NocsHeads(in_channels, nocs_layers,
-        #                             num_classes, num_bins,
-        #                             keys=['x', 'y', 'z'],
-        #                             multiheaded=multiheaded_nocs,
-        #                             mode=nocs_loss_mode)
         self.nocs_heads = nocs_heads
-
-        
         self.cache_results, self._cache = cache_results, None
         self.nocs_loss_mode = nocs_loss_mode
         self.ignore_nocs = False
@@ -207,17 +211,25 @@ class RoIHeadsWithNocs(RoIHeads):
                     if len(targets)> 0 and 'depth' in targets[0]:
                         depth = [t['depth'] for t in targets]
 
+                    # Selects the samples in the batch that have NOCS
+                    select = [not t.get('no_nocs', False) for t in targets]
+                    sample_select = lambda v: [vi for vi, s in zip(v, select) if s]
+                    def sample_select_nocs(x):
+                        m = torch.cat([p for i, p in enumerate(pos_matched_idxs) if select[i]])
+                        return {k:v[m] for (k, v) in x.items()}
+
                     reduction = 'none' if self.cache_results else 'mean'
-                    loss_mask["loss_nocs"] = nocs_loss(gt_labels, 
-                                                       gt_nocs, 
-                                                       gt_masks,
-                                                       nocs_proposals, 
-                                                       proposed_box_regions,
-                                                       pos_matched_idxs,
+
+                    loss_mask["loss_nocs"] = nocs_loss(sample_select(gt_labels), 
+                                                       sample_select(gt_nocs), 
+                                                       sample_select(gt_masks),
+                                                       sample_select_nocs(nocs_proposals), 
+                                                       sample_select(proposed_box_regions),
+                                                       sample_select(pos_matched_idxs),
                                                        reduction=reduction,
                                                        loss_fx=self.nocs_loss,
                                                        mode=self.nocs_loss_mode,
-                                                       depth=depth,
+                                                       depth=sample_select(depth),
                                                        **self._kwargs)
                     
                     if self.cache_results:

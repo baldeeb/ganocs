@@ -900,12 +900,13 @@ class Dataset(object):
             ...
     See COCODataset and ShapesDataset as examples.
     """
-    def __init__(self, class_map=None):
+    def __init__(self, class_map=None, verbose=False):
         self._image_ids = []
         self.image_info = []
         # Background is always the first class
         self.class_info = [{"source": "", "id": 0, "name": "BG"}]
         self.source_class_ids = {}
+        self._verbose = verbose
 
     def add_class(self, source, class_id, class_name):
         assert "." not in source, "Source name cannot contain a dot"
@@ -998,10 +999,11 @@ class Dataset(object):
                     self.source_class_ids[source].append(i)
         '''
 
-        print(self.class_names)
-        print(self.class_from_source_map)
-        print(self.sources)
-        #print(self.source_class_ids)
+        if self._verbose:
+            print(self.class_names)
+            print(self.class_from_source_map)
+            print(self.sources)
+            #print(self.source_class_ids)
 
 
 
