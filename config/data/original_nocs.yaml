@@ -18,6 +18,11 @@ camera_dir: ./data/original_nocs_data/camera
 real_dir:   ./data/original_nocs_data/real
 coco_dir:   ./data/original_nocs_data/coco
 
+batch_size: 6
+steps_per_epoch: 2000
+intrinsics: [[591.0125, 0, 322.525], [0, 590.16775, 244.11084], [0, 0, 1]]
+depth_scale: 0.001  # mm to m
+
 common_configs:
   #################################################################################################################################
   # NOTE: deactivated/commented-out. Weird and dealt with by mrcnn.
@@ -36,13 +41,11 @@ common_configs:
   USE_MINI_MASK: False  # NOTE: this is a change from oriinal code
   MINI_MASK_SHAPE: [28, 28]  # (height, width) of the mini-mask
 
-batch_size_all: 8
-
 training:
   _target_: datasets.original_nocs.dataset_wrapper.NOCSDataloader
   
-  batch_size: ${data.batch_size_all}
-  steps_per_epoch: 2000
+  batch_size: ${data.batch_size}
+  steps_per_epoch: ${data.steps_per_epoch}
   augment: True
   shuffle: True
   class_map: ${data.class_map}
@@ -56,8 +59,8 @@ training:
     _target_: datasets.original_nocs.dataset.NOCSDataset
     synset_names: ${data.synset_names}
     subset: 'train'
-    intrinsics: [[591.0125, 0, 322.525], [0, 590.16775, 244.11084], [0, 0, 1]]
-    depth_scale: 0.001  # mm to m
+    intrinsics: ${data.intrinsics}
+    depth_scale: ${data.depth_scale}
     
   data_info: 
     Real:
@@ -75,8 +78,8 @@ training:
 testing:
   _target_: datasets.original_nocs.dataset_wrapper.NOCSDataloader
   
-  batch_size: ${data.batch_size_all}
-  steps_per_epoch: 500
+  batch_size: ${data.batch_size}
+  steps_per_epoch: ${data.steps_per_epoch}
   augment: False
   shuffle: True
   class_map: ${data.class_map}
@@ -90,8 +93,8 @@ testing:
     _target_: datasets.original_nocs.dataset.NOCSDataset
     synset_names: ${data.synset_names}
     subset: 'val'
-    intrinsics: [[591.0125, 0, 322.525], [0, 590.16775, 244.11084], [0, 0, 1]]
-    depth_scale: 0.001  # mm to m
+    intrinsics: ${data.intrinsics}
+    depth_scale: ${data.depth_scale}
     
   data_info: 
     Real:

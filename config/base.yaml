@@ -12,9 +12,9 @@ checkpoint_dir: ./checkpoints/nocs_classification/${now:%Y-%m-%d_%H-%M-%S}
 log: true                 # Whether to push logs to wandb
 
 num_epochs: 5             # Number of epochs to train for
-batches_before_save: 500  # Number of batches before saving a checkpoint
+batches_before_save: 100  # Number of batches before saving a checkpoint
 batches_before_eval: 50   # Number of batches before evaluating
-num_eval_batches: 5      # Number of batches to evaluate on
+num_eval_batches: 5       # Number of batches to evaluate on
 
 hydra:
     run:
