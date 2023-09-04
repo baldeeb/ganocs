@@ -56,10 +56,6 @@ def run(cfg: DictConfig) -> None:
     parameters = model.parameters(keys=optim_cfg.parameters)
     optimizer = hydra.utils.instantiate(optim_cfg.optimizer, params=parameters)
 
-    # Pretrained wieghts eval
-    eval(model, testing_dataloader, cfg.device, 
-         cfg.num_eval_batches, log=log)
-
     # Training
     for epoch in tqdm(range(cfg.num_epochs), desc='Epoch'):
         for batch_i, (images, targets) in tqdm(enumerate(training_dataloader), 
