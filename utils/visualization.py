@@ -22,7 +22,7 @@ def calculate_2d_projections(coordinates_3d, intrinsics):
         projected_coordinates: [N, 2]
     """
     projected_coordinates = intrinsics @ coordinates_3d
-    projected_coordinates = projected_coordinates[:2, :] / projected_coordinates[2, :]
+    projected_coordinates = projected_coordinates[:2, :] / (projected_coordinates[2, :] + 1e-6)
     projected_coordinates = projected_coordinates.transpose()
     projected_coordinates = np.array(projected_coordinates, dtype=np.int32)
     return projected_coordinates
@@ -70,8 +70,8 @@ def draw_3d_boxes(image, transform, scale, intrinsic,
     transformed_axes = transform_coordinates_3d(xyz_axis, transform)
     projected_axes = calculate_2d_projections(transformed_axes, intrinsic)
 
-    bbox_3d = get_3d_bbox(scale, 0)
-    transformed_bbox_3d = transform_coordinates_3d(bbox_3d, transform)
+    bbox_3d = get_3d_bbox(scale[:, None])
+    transformed_bbox_3d = transform_coordinates_3d(bbox_3d[:, :, 0], transform)
     projected_bbox = calculate_2d_projections(transformed_bbox_3d, intrinsic)
     return draw(image, projected_bbox, projected_axes, color)
 

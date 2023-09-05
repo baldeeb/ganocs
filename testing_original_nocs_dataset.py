@@ -120,8 +120,68 @@ def verify_data(cfg: DictConfig):
         plot_image(img, boxes, labels)
         if i > 5: break
 
+
+
+@hydra.main(version_base=None, config_path="./config", config_name="original_data")
+def simple_test(cfg: DictConfig):
+    datasets = {
+        'training': hydra.utils.instantiate(cfg.data.training),
+        # 'testing': hydra.utils.instantiate(cfg.data.testing),
+        # 'habitat': hydra.utils.instantiate(cfg.data.base),
+    }
+    print("here")
+    def __test(x, n):
+        print(f'{n} data length {len(x)}')
+        for _ in tqdm(x, total=len(x)):
+            pass
+        print('Done')
+
+    for k, v in datasets.items():
+        __test(v, k)
+        break
+
+
+from datasets.original_nocs.visualization_utils import visualize_original_nocs_data_point
+import matplotlib.pyplot as plt
+import torch
+
+@hydra.main(version_base=None, config_path="./config", config_name="original_data")
+def visualize_data(cfg: DictConfig):
+    datasets = {
+        'testing': hydra.utils.instantiate(cfg.data.testing),
+        'training': hydra.utils.instantiate(cfg.data.training),
+        # 'habitat': hydra.utils.instantiate(cfg.data.base),
+    }
+
+    for k, dataset in datasets.items():
+        print(f'{k} data length {len(dataset)}')
+        B = dataset._batch_size
+        for data in tqdm(dataset, total=len(dataset)):
+            images, information = data[0], data[1]
+            images = [i.cpu().numpy() if isinstance(i, torch.Tensor) else i for i in images]
+            images = [i.transpose(1,2,0) for i in images]            
+            for info in information:
+                for k in info.keys():
+                    if isinstance(info[k], torch.Tensor): 
+                        info[k] = info[k].cpu().numpy()
+
+            fig, axs_grid = plt.subplots(B, 3)
+            for img, info, axs in zip(images, information, axs_grid):
+                depth, masks, nocs, labels, boxes, scales, camera_pose, intrinsics, _ = tuple(info.values())
+                visualize_original_nocs_data_point(axs, img, depth, masks, boxes, labels, nocs)
+            # fig, axs = plt.subplots(1, 3)
+            # draw_2d_boxes_with_labels(axs[0], image, masks, boxes, labels)
+            # axs[1].imshow(depth)
+            # axs[2].imshow(nocs.transpose(1,2,0))
+            plt.show()
+            if input('press enter for another "n" for next dataset: ') == 'n': break
+
+
 if __name__ == "__main__":
-    testing_termination()
+    # testing_termination()
     # compare_datasets()
     # debug_iterators()
     # verify_data()
+    # simple_test()
+
+    visualize_data()

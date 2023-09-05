@@ -1,4 +1,4 @@
 defaults:
   - base
 
-parameters: [roi_heads]
+parameters: [roi_heads, rpn, fpn]

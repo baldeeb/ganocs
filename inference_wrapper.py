@@ -23,6 +23,7 @@ class NocsDetector:
                  intrinsic, 
                  return_annotated_image=False,
                  perform_alignment=True,
+                 score_threshold=0.8,
                  **kwargs):
         # kwargs.update(self._default_config)
         args = self._default_config
@@ -35,6 +36,7 @@ class NocsDetector:
         self._K = self._to_ndarr(intrinsic)
         self._draw_box = return_annotated_image
         self._align = perform_alignment
+        self.score_threshold = score_threshold
 
     def _to_ndarr(self, a):
         if isinstance(a, torch.Tensor):
@@ -67,6 +69,12 @@ class NocsDetector:
         if len(depth.shape) == 2: depth = depth[None]
 
         for i, (r, d) in enumerate(zip(results, depth)):
+
+            # prune out any results with low certainty
+            selected_results = results[i]['scores'] > self.score_threshold
+            for k in results[i].keys(): 
+                results[i][k] = results[i][k][selected_results]
+
             results[i]['transforms'], results[i]['scales'] = [], []
             
             if self._align:

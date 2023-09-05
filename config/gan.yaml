@@ -2,25 +2,23 @@ defaults:
   - base
   - override optimization: frozen_backbone
   - override model:        gan
+  - override data:         original_nocs
   - _self_
 
-run_name:     gan
-device:       cuda:1
-log:          True
+run_name:            gan_original_data
+device:              cuda:1
+log:                 True
+num_epochs:          200
+checkpoint_dir:     ./checkpoints/nocs_classification/${now:%Y-%m-%d_%H-%M-%S}
 
 model:
-  num_classes: 2
+  num_classes: 10
   override_num_classes: True
+  nocs_loss:
+    num_classes: 10  
 
 optimization:
-  parameters: [roi_heads]  # roi_heads or nocs_heads
   optimizer: 
     lr: 0.0001
     weight_decay: 1e-6
 
-
-data:
-  training:
-    dataset:
-      data_dir: ./data/old-habitat-gen/200of100scenes_26selectChairs/train
-    batch_size: 8

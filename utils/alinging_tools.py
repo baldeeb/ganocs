@@ -29,7 +29,8 @@ def estimateSimilarityTransform(source: np.array, target: np.array, verbose=Fals
     SourceInliersHom, TargetInliersHom, BestInlierRatio = getRANSACInliers(SourceHom, TargetHom, MaxIterations=nIter, PassThreshold=PassT, StopThreshold=StopT)
 
     if(BestInlierRatio < 0.1):
-        print('[ WARN ] - Something is wrong. Small BestInlierRatio: ', BestInlierRatio)
+        if verbose:
+            print('[ WARN ] - Something is wrong. Small BestInlierRatio: ', BestInlierRatio)
         return None, None, None, None
 
     Scales, Rotation, Translation, OutTransform = estimateSimilarityUmeyama(SourceInliersHom, TargetInliersHom)
@@ -180,7 +181,7 @@ def estimateSimilarityUmeyama(SourceHom, TargetHom):
     Rotation = np.matmul(U, Vh).T # Transpose is the one that works
 
     varP = np.var(SourceHom[:3, :], axis=1).sum()
-    ScaleFact = 1/varP * np.sum(D) # scale factor
+    ScaleFact = 1 / (varP + 1e-6) * np.sum(D) # scale factor
     Scales = np.array([ScaleFact, ScaleFact, ScaleFact])
     ScaleMatrix = np.diag(Scales)
 

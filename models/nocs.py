@@ -12,7 +12,7 @@ from torchvision.models.detection._utils import overwrite_eps
 from torchvision.models.resnet import resnet50, ResNet50_Weights
 from torchvision.models._utils import _ovewrite_value_param
 from torchvision.ops import misc as misc_nn_ops
-
+import logging
 
 class NOCS(MaskRCNN):
     def __init__(
@@ -102,7 +102,6 @@ class NOCS(MaskRCNN):
         self.roi_heads = RoIHeadsWithNocs.from_torchvision_roiheads(
                                                     self.roi_heads,
                                                     **kwargs)
-        
         self.cache = None
         
         # Update Transforms to include NOCS
@@ -115,6 +114,16 @@ class NOCS(MaskRCNN):
                                             image_mean=image_mean, 
                                             image_std=image_std, 
                                             **kwargs)
+        self.rpn_nms_thresh = rpn_nms_thresh
+        self.rpn_score_thresh = rpn_score_thresh
+        
+        # TODO:
+        self.eval_rpn_nms_thresh = 0.3
+        self.eval_rpn_score_thresh = 0.7
+        # self.eval_rpn_nms_thresh = kwargs.get('eval_rpn_nms_thresh',
+        #                                       rpn_nms_thresh)
+        # self.eval_rpn_score_thresh = kwargs.get('eval_rpn_score_thresh',
+        #                                         rpn_score_thresh)
     
     def _updated_sizes(self, s):
         if isinstance(s, list): 
@@ -131,7 +140,7 @@ class NOCS(MaskRCNN):
             original_sizes = torch.FloatTensor([img.shape[-2:] for img in images])
             new_size = self._updated_sizes(original_sizes)
             self.cache = self.transform.full_postprocess(
-                                            self.roi_heads.cache, 
+                                            self.roi_heads._cache, 
                                             new_size,
                                             original_sizes.long(),)
         return result
@@ -142,12 +151,23 @@ class NOCS(MaskRCNN):
             elif any([k in n for k in keys]): yield p
 
 
+    def train(self, mode: bool = True):
+        MaskRCNN.train(self, mode)
+        if mode is True:
+            self.roi_heads.nms_thresh = self.rpn_nms_thresh
+            self.roi_heads.score_thresh = self.rpn_score_thresh
+        else:
+            self.roi_heads.nms_thresh = self.eval_rpn_nms_thresh
+            self.roi_heads.score_thresh = self.eval_rpn_score_thresh
+        return self
+
+# TODO: remove this override stuff and make it so that if a model is loaded
+# it has to match the model's config
 def get_nocs_resnet50_fpn(
     *,
     maskrcnn_weights: Optional[MaskRCNN_ResNet50_FPN_Weights] = None,
     progress: bool = True,
     num_classes: Optional[int] = None,
-    override_num_classes: bool = False,
     weights_backbone: Optional[ResNet50_Weights] = ResNet50_Weights.IMAGENET1K_V1,
     trainable_backbone_layers: Optional[int] = None,
     **kwargs: Any,
@@ -157,20 +177,19 @@ def get_nocs_resnet50_fpn(
 
     if maskrcnn_weights is not None:
         weights_backbone = None
-        try:
-            num_classes = _ovewrite_value_param("num_classes", num_classes, 
-                                                len(maskrcnn_weights.meta["categories"]))
-            override_num_classes = False
-            num_classes_override = num_classes
-        except ValueError as e:
-            if not override_num_classes: 
-                raise e
-            else: 
-                num_classes_override = int(num_classes)
-                num_classes = len(maskrcnn_weights.meta["categories"])
+        loaded_num_classes = len(maskrcnn_weights.meta["categories"])
+        if num_classes is not None:
+            if int(num_classes) != loaded_num_classes:
+                logging.info('WARNING: The num_classes provided does not ' +
+                            'match the loaded weights. ' +
+                            'Adjusting model heads to remedy this...')
+                override_num_classes = True
+            else:
+                override_num_classes = False
+        else: 
+            num_classes = loaded_num_classes
     elif num_classes is None:
-        num_classes = 91
-        override_num_classes = False
+        raise RuntimeError('Model needs explicit num_classes or a set of weights to infer it from.')
 
     is_trained = maskrcnn_weights is not None or weights_backbone is not None
     trainable_backbone_layers = _validate_trainable_layers(is_trained, trainable_backbone_layers, 5, 3)
@@ -178,7 +197,7 @@ def get_nocs_resnet50_fpn(
 
     backbone = resnet50(weights=weights_backbone, progress=progress, norm_layer=norm_layer)
     backbone = _resnet_fpn_extractor(backbone, trainable_backbone_layers)
-    model = NOCS(backbone, num_classes=num_classes, **kwargs)
+    model = NOCS(backbone, num_classes=loaded_num_classes, **kwargs)
 
     if maskrcnn_weights is not None:
         model.load_state_dict(maskrcnn_weights.get_state_dict(progress=progress), 
@@ -188,19 +207,12 @@ def get_nocs_resnet50_fpn(
 
         if override_num_classes:
             model.roi_heads.box_predictor.cls_score = nn.Linear(
-                model.roi_heads.box_predictor.cls_score.in_features, num_classes_override
+                model.roi_heads.box_predictor.cls_score.in_features, num_classes
             )
-            model.roi_heads.box_predictor.num_classes = num_classes_override
+            model.roi_heads.box_predictor.num_classes = num_classes
             model.roi_heads.mask_predictor.mask_fcn_logits = nn.Conv2d(
-                model.roi_heads.mask_predictor.mask_fcn_logits.in_channels, num_classes_override, 1, 1, 0
+                model.roi_heads.mask_predictor.mask_fcn_logits.in_channels, num_classes, 1, 1, 0
             )
 
             model.roi_heads = RoIHeadsWithNocs.from_torchvision_roiheads(model.roi_heads, **kwargs)
-            # binsxcls = model.roi_heads.nocs_heads.num_bins * num_classes_override
-            # n = model.roi_heads.nocs_heads.head.x[1][2]
-            # in_ch, kernel_s, stride, padding = n.in_channels, n.kernel_size, n.stride, n.padding
-            # model.roi_heads.nocs_heads.head.x[1][2] = nn.Conv2d(in_ch, binsxcls, kernel_s, stride, padding)
-            # model.roi_heads.nocs_heads.head.y[1][2] = nn.Conv2d(in_ch, binsxcls, kernel_s, stride, padding)
-            # model.roi_heads.nocs_heads.head.z[1][2] = nn.Conv2d(in_ch, binsxcls, kernel_s, stride, padding)
-            # model.roi_heads.nocs_heads.num_classes = num_classes_override
     return model

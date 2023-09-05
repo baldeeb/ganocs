@@ -9,4 +9,4 @@ nocs_num_bins: 32
 nocs_loss_mode: classification
 multiheaded_nocs: True
 
-load:
+load:  # Set to load checkpoint
