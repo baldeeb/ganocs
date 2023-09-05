@@ -11,37 +11,70 @@ previously noted:
 
 import numpy as np
 from pytorch3d.ops import box3d_overlap
+import torch
 
-def get_3d_bbox(scale, shift = 0):
-    """
+RATIOS_3D_BOX = torch.tensor([[+1/2, +1/2, +1/2],
+                              [+1/2, +1/2, -1/2],
+                              [-1/2, +1/2, +1/2],
+                              [-1/2, +1/2, -1/2],
+                              [+1/2, -1/2, +1/2],
+                              [+1/2, -1/2, -1/2],
+                              [-1/2, -1/2, +1/2],
+                              [-1/2, -1/2, -1/2]])
+
+
+def get_3d_bbox(scale:np.ndarray, shift:np.ndarray=np.array([[0]]), corner_ratios=RATIOS_3D_BOX):
+    """ TODO: fix box corners in visual
+        (4) +---------+. (5)
+            | ` .     |  ` .
+            | (0) +---+-----+ (1)
+            |     |   |     |
+        (7) +-----+---+. (6)|
+            ` .   |     ` . |
+            (3) ` +---------+ (2)
+
+    Expects first dim to be the scaler/shifts and each array must be 2 dimensional
     Input: 
-        scale: [3] or scalar
-        shift: [3] or scalar
-    Return 
-        bbox_3d: [3, N]
-
+        scale: [{3 or 1}, ...] or scalar
+        shift: [{3 or 1}, ...] or scalar
+    Return
+        bbox_3d: [3, 8, ...]
     """
-    if hasattr(scale, "__iter__"):
-        bbox_3d = np.array([[scale[0] / 2, +scale[1] / 2, scale[2] / 2],
-                  [scale[0] / 2, +scale[1] / 2, -scale[2] / 2],
-                  [-scale[0] / 2, +scale[1] / 2, scale[2] / 2],
-                  [-scale[0] / 2, +scale[1] / 2, -scale[2] / 2],
-                  [+scale[0] / 2, -scale[1] / 2, scale[2] / 2],
-                  [+scale[0] / 2, -scale[1] / 2, -scale[2] / 2],
-                  [-scale[0] / 2, -scale[1] / 2, scale[2] / 2],
-                  [-scale[0] / 2, -scale[1] / 2, -scale[2] / 2]]) + shift
-    else:
-        bbox_3d = np.array([[scale / 2, +scale / 2, scale / 2],
-                  [scale / 2, +scale / 2, -scale / 2],
-                  [-scale / 2, +scale / 2, scale / 2],
-                  [-scale / 2, +scale / 2, -scale / 2],
-                  [+scale / 2, -scale / 2, scale / 2],
-                  [+scale / 2, -scale / 2, -scale / 2],
-                  [-scale / 2, -scale / 2, scale / 2],
-                  [-scale / 2, -scale / 2, -scale / 2]]) +shift
+    bboxes = (corner_ratios.T[:, :, None] * scale.reshape((scale.shape[0], -1))[:, None]) \
+                + shift.reshape((shift.shape[0], -1))[:, None]
+    return bboxes.reshape((3, 8, *scale.shape[1:]))
 
-    bbox_3d = bbox_3d.transpose()
-    return bbox_3d
+
+# def get_3d_bbox(scale, shift = 0):
+#     """
+#     Input: 
+#         scale: [3, ...] or scalar
+#         shift: [3, ...] or scalar
+#     Return 
+#         bbox_3d: [3, N]
+
+#     """
+#     if hasattr(scale, "__iter__"):
+#         bbox_3d = np.array([[scale[0] / 2, +scale[1] / 2, scale[2] / 2],
+#                   [scale[0] / 2, +scale[1] / 2, -scale[2] / 2],
+#                   [-scale[0] / 2, +scale[1] / 2, scale[2] / 2],
+#                   [-scale[0] / 2, +scale[1] / 2, -scale[2] / 2],
+#                   [+scale[0] / 2, -scale[1] / 2, scale[2] / 2],
+#                   [+scale[0] / 2, -scale[1] / 2, -scale[2] / 2],
+#                   [-scale[0] / 2, -scale[1] / 2, scale[2] / 2],
+#                   [-scale[0] / 2, -scale[1] / 2, -scale[2] / 2]]) + shift
+#     else:
+#         bbox_3d = np.array([[scale / 2, +scale / 2, scale / 2],
+#                   [scale / 2, +scale / 2, -scale / 2],
+#                   [-scale / 2, +scale / 2, scale / 2],
+#                   [-scale / 2, +scale / 2, -scale / 2],
+#                   [+scale / 2, -scale / 2, scale / 2],
+#                   [+scale / 2, -scale / 2, -scale / 2],
+#                   [-scale / 2, -scale / 2, scale / 2],
+#                   [-scale / 2, -scale / 2, -scale / 2]]) +shift
+
+#     bbox_3d = bbox_3d.transpose()
+#     return bbox_3d
 
 
 def transform_coordinates_3d(coordinates, RT):
@@ -53,25 +86,45 @@ def transform_coordinates_3d(coordinates, RT):
         new_coordinates: [3, N]
 
     """
-    assert coordinates.shape[0] == 3
-    coordinates = np.vstack([coordinates, np.ones((1, coordinates.shape[1]), dtype=np.float32)])
-    new_coordinates = RT @ coordinates
-    new_coordinates = new_coordinates[:3, :] / (new_coordinates[3, :] + 1e-6)
-    return new_coordinates
+    _homogenize = lambda a: np.vstack([a, np.ones((1, a.shape[1]), 
+                                                  dtype=np.float32)])
+    r = RT @ _homogenize(coordinates)
+    r = r[:3, :] / (r[3, :] + 1e-6)
+    return r
 
 
-def asymmetric_3d_iou(RT1, RT2, scales1, scales2):
-    '''
-    Args:
-        RT{1, 2}:     [{M, N}, 4, 4]
-        scales{1, 2}: [{M, N}, 3]
-    '''
-    cube1 = get_3d_bbox(scales1, 0)
-    bbox1 = transform_coordinates_3d(cube1, RT1)
-    cube2 = get_3d_bbox(scales2, 0)
-    bbox2 = transform_coordinates_3d(cube2, RT2)
-    _, iou = box3d_overlap(bbox1, bbox2)
-    return iou
+# def asymmetric_3d_iou(RT1, RT2, scales1, scales2):
+#     '''
+#     Args:
+#         RT{1, 2}:     [4, 4]
+#         scales{1, 2}: [3]
+#     '''
+#     box_corner_vertices = [
+#         [0, 0, 0],
+#         [1, 0, 0],
+#         [1, 1, 0],
+#         [0, 1, 0],
+#         [0, 0, 1],
+#         [1, 0, 1],
+#         [1, 1, 1],
+#         [0, 1, 1],
+#     ]
+#     cube1 = get_3d_bbox(scales1[:, None], corner_ratios=np.array(box_corner_vertices))
+#     bbox1 = transform_coordinates_3d(cube1[:, :, 0], RT1)
+#     cube2 = get_3d_bbox(scales2[:, None], corner_ratios=np.array(box_corner_vertices))
+#     bbox2 = transform_coordinates_3d(cube2[:, :, 0], RT2)
+    
+#     _process = lambda b: torch.from_numpy(
+#                             # np.flip(
+#                                 # b.reshape(3, 8, -1).transpose((2, 1, 0)), 
+#                                 # 1
+#                                 # ).copy()
+#                                 b.reshape(3, 8, -1).transpose((2, 1, 0)).copy()
+                                
+#                             ).type(torch.float32)
+#     _, iou = box3d_overlap(_process(bbox1), _process(bbox2), eps=1e-6)
+#     iou = iou.reshape(bbox1.shape[2:])
+#     return iou
 
 def iou(RT_1, RT_2, scales_1, scales_2):
     """
@@ -88,29 +141,29 @@ def iou(RT_1, RT_2, scales_1, scales_2):
 
 
 
-# def asymmetric_3d_iou(RT_1, RT_2, scales_1, scales_2):
-#     noc_cube_1 = get_3d_bbox(scales_1, 0)
-#     bbox_3d_1 = transform_coordinates_3d(noc_cube_1, RT_1)
+def asymmetric_3d_iou(RT_1, RT_2, scales_1, scales_2):
+    noc_cube_1 = get_3d_bbox(scales_1)
+    bbox_3d_1 = transform_coordinates_3d(noc_cube_1, RT_1)
 
-#     noc_cube_2 = get_3d_bbox(scales_2, 0)
-#     bbox_3d_2 = transform_coordinates_3d(noc_cube_2, RT_2)
+    noc_cube_2 = get_3d_bbox(scales_2)
+    bbox_3d_2 = transform_coordinates_3d(noc_cube_2, RT_2)
 
-#     bbox_1_max = np.amax(bbox_3d_1, axis=0)
-#     bbox_1_min = np.amin(bbox_3d_1, axis=0)
-#     bbox_2_max = np.amax(bbox_3d_2, axis=0)
-#     bbox_2_min = np.amin(bbox_3d_2, axis=0)
+    bbox_1_max = np.amax(bbox_3d_1, axis=0)
+    bbox_1_min = np.amin(bbox_3d_1, axis=0)
+    bbox_2_max = np.amax(bbox_3d_2, axis=0)
+    bbox_2_min = np.amin(bbox_3d_2, axis=0)
 
-#     overlap_min = np.maximum(bbox_1_min, bbox_2_min)
-#     overlap_max = np.minimum(bbox_1_max, bbox_2_max)
+    overlap_min = np.maximum(bbox_1_min, bbox_2_min)
+    overlap_max = np.minimum(bbox_1_max, bbox_2_max)
 
-#     # intersections and union
-#     if np.amin(overlap_max - overlap_min) <0:
-#         intersections = 0
-#     else:
-#         intersections = np.prod(overlap_max - overlap_min)
-#     union = np.prod(bbox_1_max - bbox_1_min) + np.prod(bbox_2_max - bbox_2_min) - intersections
-#     overlaps = intersections / union
-#     return overlaps
+    # intersections and union
+    if np.amin(overlap_max - overlap_min) <0:
+        intersections = 0
+    else:
+        intersections = np.prod(overlap_max - overlap_min)
+    union = np.prod(bbox_1_max - bbox_1_min) + np.prod(bbox_2_max - bbox_2_min) - intersections
+    overlaps = intersections / union
+    return overlaps
 
 
 # def compute_3d_matches(gt_class_ids, gt_RTs, gt_scales, 

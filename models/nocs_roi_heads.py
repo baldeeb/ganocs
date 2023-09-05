@@ -212,35 +212,39 @@ class RoIHeadsWithNocs(RoIHeads):
                         depth = [t['depth'] for t in targets]
 
                     # Selects the samples in the batch that have NOCS
+                    # TODO: Move this into the loss function.
+                    #   That should make things more efficient.
                     select = [not t.get('no_nocs', False) for t in targets]
-                    sample_select = lambda v: [vi for vi, s in zip(v, select) if s]
-                    def sample_select_nocs(x):
-                        m = torch.cat([p for i, p in enumerate(pos_matched_idxs) if select[i]])
-                        return {k:v[m] for (k, v) in x.items()}
+                    if any(select):
+                        sample_select = lambda v: [vi for vi, s in zip(v, select) if s]
+                        def sample_select_nocs(x):
+                            m = torch.cat([p for i, p in enumerate(pos_matched_idxs) if select[i]])
+                            return {k:v[m] for (k, v) in x.items()}
 
-                    reduction = 'none' if self.cache_results else 'mean'
+                        reduction = 'none' if self.cache_results else 'mean'
 
-                    loss_mask["loss_nocs"] = nocs_loss(sample_select(gt_labels), 
-                                                       sample_select(gt_nocs), 
-                                                       sample_select(gt_masks),
-                                                       sample_select_nocs(nocs_proposals), 
-                                                       sample_select(proposed_box_regions),
-                                                       sample_select(pos_matched_idxs),
-                                                       reduction=reduction,
-                                                       loss_fx=self.nocs_loss,
-                                                       mode=self.nocs_loss_mode,
-                                                       depth=sample_select(depth),
-                                                       **self._kwargs)
-                    
-                    if self.cache_results:
-                        split_loss = separate_image_results(loss_mask['loss_nocs'], labels)
-                        split_nocs = separate_image_results(nocs_proposals, labels)
-                        for i in range(len(result)):
-                            result[i]['nocs'] = {k:self._properly_allocate(v[i]) 
-                                                 for k, v in split_nocs.items()}
-                            obj_loss = split_loss[i].mean((1,2,3))
-                            result[i]['loss_nocs'] = self._properly_allocate(obj_loss)
-                        loss_mask["loss_nocs"] = torch.mean(loss_mask["loss_nocs"])
+                        loss_mask["loss_nocs"] = nocs_loss(sample_select(gt_labels), 
+                                                        sample_select(gt_nocs), 
+                                                        sample_select(gt_masks),
+                                                        sample_select_nocs(nocs_proposals), 
+                                                        sample_select(proposed_box_regions),
+                                                        sample_select(pos_matched_idxs),
+                                                        reduction=reduction,
+                                                        loss_fx=self.nocs_loss,
+                                                        mode=self.nocs_loss_mode,
+                                                        depth=sample_select(depth),
+                                                        **self._kwargs)
+                        
+                        if self.cache_results:
+                            split_loss = separate_image_results(loss_mask['loss_nocs'], labels)
+                            split_nocs = separate_image_results(nocs_proposals, labels)
+                            for i in range(len(result)):
+                                result[i]['nocs'] = {k:self._properly_allocate(v[i]) 
+                                                    for k, v in split_nocs.items()}
+                                obj_loss = split_loss[i].mean((1,2,3))
+                                result[i]['loss_nocs'] = self._properly_allocate(obj_loss)
+                            loss_mask["loss_nocs"] = torch.mean(loss_mask["loss_nocs"])
+                
 
             else:
                 labels = [r["labels"] for r in result]

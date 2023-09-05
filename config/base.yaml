@@ -9,6 +9,7 @@ run_name:     base
 
 device: cuda:0
 checkpoint_dir: ./checkpoints/nocs_classification/${now:%Y-%m-%d_%H-%M-%S}
+retain_n_checkpoints: 5
 log: true                 # Whether to push logs to wandb
 
 num_epochs: 5             # Number of epochs to train for

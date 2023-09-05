@@ -70,8 +70,8 @@ def draw_3d_boxes(image, transform, scale, intrinsic,
     transformed_axes = transform_coordinates_3d(xyz_axis, transform)
     projected_axes = calculate_2d_projections(transformed_axes, intrinsic)
 
-    bbox_3d = get_3d_bbox(scale, 0)
-    transformed_bbox_3d = transform_coordinates_3d(bbox_3d, transform)
+    bbox_3d = get_3d_bbox(scale[:, None])
+    transformed_bbox_3d = transform_coordinates_3d(bbox_3d[:, :, 0], transform)
     projected_bbox = calculate_2d_projections(transformed_bbox_3d, intrinsic)
     return draw(image, projected_bbox, projected_axes, color)
 

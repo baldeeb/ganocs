@@ -7,7 +7,7 @@ defaults:
 
 run_name:            original_nocs_data
 device:              cuda:0
-log:                 False
+log:                 True
 num_epochs:          50
 checkpoint_dir:     ./checkpoints/nocs_classification/${now:%Y-%m-%d_%H-%M-%S}
 

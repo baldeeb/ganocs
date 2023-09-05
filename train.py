@@ -20,6 +20,15 @@ def targets2device(targets, device):
             targets[i][k] = targets[i][k].to(device)
     return targets
 
+def numpify(data):
+    if isinstance(data, dict):
+        return {k: numpify(v) for k, v in data.items()}
+    elif isinstance(data, list):
+        return [numpify(v) for v in data]
+    elif isinstance(data, torch.Tensor):
+        return data.detach().cpu().numpy()
+    else:
+        return data
 
 
 @hydra.main(version_base=None, config_path='./config', config_name='base')
@@ -57,11 +66,11 @@ def run(cfg: DictConfig) -> None:
     optimizer = hydra.utils.instantiate(optim_cfg.optimizer, params=parameters)
 
     # Training
-    for epoch in tqdm(range(cfg.num_epochs), desc='Epoch'):
+    for epoch in tqdm(range(cfg.num_epochs), desc='Epoch Loop'):
         for batch_i, (images, targets) in tqdm(enumerate(training_dataloader), 
                                                total=int(len(training_dataloader)
                                                          /training_dataloader.batch_size),
-                                               leave=False, desc='Batch'):
+                                               leave=False, desc='Batch Loop'):
             images = [im.to(cfg.device) for im in images]
             targets = targets2device(targets, cfg.device)       # TODO: Discard and pass device to collate_fn
             
@@ -73,16 +82,18 @@ def run(cfg: DictConfig) -> None:
             loss.backward()                                     # Backward pass
             optimizer.step()
             
-            log(losses)
+            log(numpify(losses))
             log({'loss': loss})
             if batch_i % cfg.batches_before_eval == 0:          # Eval
                 eval(model, testing_dataloader, cfg.device, 
                      cfg.num_eval_batches, log=log)
             
             if cfg.batches_before_save and batch_i + 1 % cfg.batches_before_save == 0:
-                save_model(model, pl.Path(cfg.checkpoint_dir)/f'{cfg.run_name}_{epoch}_{batch_i}.pth')
+                save_model(model, pl.Path(cfg.checkpoint_dir)/f'{cfg.run_name}_{epoch}_{batch_i}.pth',
+                           retain_n=cfg.get('retain_n_checkpoints', None))
             
-        save_model(model, pl.Path(cfg.checkpoint_dir)/f'{cfg.run_name}_{epoch+1}.pth')
+        save_model(model, pl.Path(cfg.checkpoint_dir)/f'{cfg.run_name}_{epoch+1}.pth',
+                   retain_n=cfg.get('retain_n_checkpoints', None))
         log({'epoch': epoch+1})
 
 
