@@ -8,7 +8,7 @@ synset_names :
   - laptop  #5
   - mug     #6
             
-class_map : 
+class_map: 
   bottle: bottle
   bowl: bowl
   cup: mug

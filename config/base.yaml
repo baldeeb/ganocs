@@ -1,14 +1,14 @@
 defaults:
   - model: base
-  - data: base
-  - optimization: base
+  - data: original_nocs
+  - optimization: frozen_backbone
   - _self_
 
 project_name: NOCS
 run_name:     base
 
-device: cuda:0
-checkpoint_dir: ./checkpoints/nocs_classification/${now:%Y-%m-%d_%H-%M-%S}
+device: cpu
+checkpoint_dir: ./checkpoints/base/${now:%Y-%m-%d_%H-%M-%S}
 retain_n_checkpoints: 5
 log: true                 # Whether to push logs to wandb
 
@@ -17,6 +17,10 @@ batches_before_save: 100  # Number of batches before saving a checkpoint
 batches_before_eval: 50   # Number of batches before evaluating
 num_eval_batches: 5       # Number of batches to evaluate on
 
+model:
+  num_classes: 7
+  override_num_classes: True
+  
 hydra:
     run:
         dir: outputs/${project_name}/${run_name}/${now:%Y-%m-%d_%H-%M-%S}

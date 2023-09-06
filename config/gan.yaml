@@ -9,13 +9,13 @@ run_name:            gan_original_data
 device:              cuda:1
 log:                 True
 num_epochs:          200
-checkpoint_dir:     ./checkpoints/nocs_classification/${now:%Y-%m-%d_%H-%M-%S}
+checkpoint_dir:     ./checkpoints/gan/${now:%Y-%m-%d_%H-%M-%S}
 
 model:
-  num_classes: 10
+  num_classes: 7
   override_num_classes: True
   nocs_loss:
-    num_classes: 10  
+    num_classes: 7  
 
 optimization:
   optimizer: 

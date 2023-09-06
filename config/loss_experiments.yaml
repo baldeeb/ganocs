@@ -1,9 +1,0 @@
-defaults:
-  - base
-  - override model: with_dispersion
-
-# model:
-#   load: /home/baldeeb/Code/pytorch-NOCS/checkpoints/nocs_classification/2023-05-18_15-42-57/new_eval_metrics_0.pth
-
-run_name: dispersion_loss
-device: cuda:0
