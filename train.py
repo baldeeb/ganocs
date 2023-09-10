@@ -67,6 +67,7 @@ def run(cfg: DictConfig) -> None:
 
     # Training
     for epoch in tqdm(range(cfg.num_epochs), desc='Training Epoch Loop'):
+        log({'epoch': epoch+1})
         for batch_i, (images, targets) in tqdm(enumerate(training_dataloader), 
                                                total=int(len(training_dataloader)
                                                          /training_dataloader.batch_size),
@@ -89,12 +90,11 @@ def run(cfg: DictConfig) -> None:
                      cfg.num_eval_batches, log=log)
             
             if cfg.batches_before_save and batch_i + 1 % cfg.batches_before_save == 0:
-                save_model(model, pl.Path(cfg.checkpoint_dir)/f'{cfg.run_name}_{epoch}_{batch_i}.pth',
+                save_model(model, pl.Path(cfg.checkpoint_dir)/f'{epoch}_{batch_i}.pth',
                            retain_n=cfg.get('retain_n_checkpoints', None))
             
-        save_model(model, pl.Path(cfg.checkpoint_dir)/f'{cfg.run_name}_{epoch+1}.pth',
+        save_model(model, pl.Path(cfg.checkpoint_dir)/f'{epoch}_end.pth',
                    retain_n=cfg.get('retain_n_checkpoints', None))
-        log({'epoch': epoch+1})
 
 
 if __name__ == '__main__':
