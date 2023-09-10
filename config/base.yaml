@@ -7,15 +7,15 @@ defaults:
 project_name: NOCS
 run_name:     base
 
-device: cpu
+device: cuda:0
 checkpoint_dir: ./checkpoints/base/${now:%Y-%m-%d_%H-%M-%S}
-retain_n_checkpoints: 5
+retain_n_checkpoints: 5   # Checkpoints to retain
 log: true                 # Whether to push logs to wandb
 
-num_epochs: 5             # Number of epochs to train for
-batches_before_save: 100  # Number of batches before saving a checkpoint
-batches_before_eval: 50   # Number of batches before evaluating
-num_eval_batches: 5       # Number of batches to evaluate on
+num_epochs: 50            # Epochs to train for
+batches_before_save: 100  # Batches before saving a checkpoint
+batches_before_eval: 50   # Batches before evaluating
+num_eval_batches: 5       # Batches to evaluate on
 
 model:
   num_classes: 7

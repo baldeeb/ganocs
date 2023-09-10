@@ -19,7 +19,7 @@ real_dir:   ./data/original_nocs_data/real
 coco_dir:   ./data/original_nocs_data/coco
 
 batch_size: 6
-steps_per_epoch: 2000
+steps_per_epoch: 1000
 intrinsics: [[591.0125, 0, 322.525], [0, 590.16775, 244.11084], [0, 0, 1]]
 depth_scale: 0.001  # mm to m
 

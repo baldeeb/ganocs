@@ -214,12 +214,18 @@ class RoIHeadsWithNocs(RoIHeads):
                     # Selects the samples in the batch that have NOCS
                     # TODO: Move this into the loss function.
                     #   That should make things more efficient.
-                    select = [not t.get('no_nocs', False) for t in targets]
-                    if any(select):
-                        sample_select = lambda v: [vi for vi, s in zip(v, select) if s]
+                    nocs_gt_available = [not t.get('no_nocs', False) for t in targets]
+                    if any(nocs_gt_available):
+                        sample_select = lambda v: [vi for vi, s in zip(v, nocs_gt_available) if s]
+                        # sample_select_nocs = lambda x: {k:sample_select(v) for (k, v) in x.items()}
+
                         def sample_select_nocs(x):
-                            m = torch.cat([p for i, p in enumerate(pos_matched_idxs) if select[i]])
-                            return {k:v[m] for (k, v) in x.items()}
+                            len_s = [len(v) for v in pos_matched_idxs]
+                            zs, os = lambda x: torch.zeros(x, dtype=torch.bool), lambda x: torch.ones(x, dtype=torch.bool)
+                            mask = torch.cat([os(l) if i else zs(l) for i, l in zip(nocs_gt_available, len_s)])
+                            # ranges = [(a, b) for a, b in zip([0]+len_s[:-1], len_s)]
+                            # m = torch.cat([p for i, p in enumerate(pos_matched_idxs) if nocs_gt_available[i]])
+                            return {k:v[mask] for (k, v) in x.items()}
 
                         reduction = 'none' if self.cache_results else 'mean'
 
