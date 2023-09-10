@@ -114,16 +114,6 @@ class NOCS(MaskRCNN):
                                             image_mean=image_mean, 
                                             image_std=image_std, 
                                             **kwargs)
-        self.rpn_nms_thresh = rpn_nms_thresh
-        self.rpn_score_thresh = rpn_score_thresh
-        
-        # TODO:
-        self.eval_rpn_nms_thresh = 0.3
-        self.eval_rpn_score_thresh = 0.7
-        # self.eval_rpn_nms_thresh = kwargs.get('eval_rpn_nms_thresh',
-        #                                       rpn_nms_thresh)
-        # self.eval_rpn_score_thresh = kwargs.get('eval_rpn_score_thresh',
-        #                                         rpn_score_thresh)
     
     def _updated_sizes(self, s):
         if isinstance(s, list): 
@@ -150,16 +140,6 @@ class NOCS(MaskRCNN):
             if keys is None: yield p
             elif any([k in n for k in keys]): yield p
 
-
-    def train(self, mode: bool = True):
-        MaskRCNN.train(self, mode)
-        if mode is True:
-            self.roi_heads.nms_thresh = self.rpn_nms_thresh
-            self.roi_heads.score_thresh = self.rpn_score_thresh
-        else:
-            self.roi_heads.nms_thresh = self.eval_rpn_nms_thresh
-            self.roi_heads.score_thresh = self.eval_rpn_score_thresh
-        return self
 
 # TODO: remove this override stuff and make it so that if a model is loaded
 # it has to match the model's config

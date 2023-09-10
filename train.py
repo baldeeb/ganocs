@@ -66,11 +66,11 @@ def run(cfg: DictConfig) -> None:
     optimizer = hydra.utils.instantiate(optim_cfg.optimizer, params=parameters)
 
     # Training
-    for epoch in tqdm(range(cfg.num_epochs), desc='Epoch Loop'):
+    for epoch in tqdm(range(cfg.num_epochs), desc='Training Epoch Loop'):
         for batch_i, (images, targets) in tqdm(enumerate(training_dataloader), 
                                                total=int(len(training_dataloader)
                                                          /training_dataloader.batch_size),
-                                               leave=False, desc='Batch Loop'):
+                                               leave=False, desc='Training Batch Loop'):
             images = [im.to(cfg.device) for im in images]
             targets = targets2device(targets, cfg.device)       # TODO: Discard and pass device to collate_fn
             
