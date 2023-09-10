@@ -1,21 +1,18 @@
 defaults:
   - base
-  - override optimization: frozen_backbone
   - override model:        gan
-  - override data:         original_nocs
   - _self_
 
-run_name:            gan_original_data
+log:    True
+logger:
+  name: gan
+
 device:              cuda:1
-log:                 True
-num_epochs:          200
-checkpoint_dir:     ./checkpoints/gan/${now:%Y-%m-%d_%H-%M-%S}
+checkpoint_dir:     ./checkpoints/${logger.name}/${now:%Y-%m-%d_%H-%M-%S}
 
 model:
-  num_classes: 7
-  override_num_classes: True
   nocs_loss:
-    num_classes: 7  
+    num_classes: 7  # number of discriminators to use
 
 optimization:
   optimizer: 

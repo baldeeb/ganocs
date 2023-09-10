@@ -40,7 +40,7 @@ def run(cfg: DictConfig) -> None:
 
     # Logger
     if cfg.log: 
-        wandb.init(project=cfg.project_name, name=cfg.run_name, config=cfg)
+        wandb.init(**cfg.logger, config=cfg)
         log = wandb.log
     else: log = lambda x: None
 

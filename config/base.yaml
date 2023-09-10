@@ -4,15 +4,17 @@ defaults:
   - optimization: frozen_backbone
   - _self_
 
-project_name: NOCS
-run_name:     base
+log: true                 # Whether to push logs to wandb
+logger:
+  project: gan-nocs
+  entity:  rpm-collab
+  name:    base
 
 device: cuda:0
-checkpoint_dir: ./checkpoints/base/${now:%Y-%m-%d_%H-%M-%S}
+checkpoint_dir: ./checkpoints/${logger.name}/${now:%Y-%m-%d_%H-%M-%S}
 retain_n_checkpoints: 5   # Checkpoints to retain
-log: true                 # Whether to push logs to wandb
 
-num_epochs: 50            # Epochs to train for
+num_epochs: 200            # Epochs to train for
 batches_before_save: 100  # Batches before saving a checkpoint
 batches_before_eval: 50   # Batches before evaluating
 num_eval_batches: 5       # Batches to evaluate on
@@ -23,4 +25,4 @@ model:
   
 hydra:
     run:
-        dir: outputs/${project_name}/${run_name}/${now:%Y-%m-%d_%H-%M-%S}
+        dir: outputs/${logger.project}/${logger.name}/${now:%Y-%m-%d_%H-%M-%S}
