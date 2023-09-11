@@ -4,11 +4,11 @@ from tqdm import tqdm
 import wandb
 
 import hydra
-from omegaconf import DictConfig, OmegaConf
+from omegaconf import DictConfig
 
 import torch
 
-from utils.load_save import save_model
+from utils.load_save import save_model, save_config
 from utils.evaluation.wrapper import eval
 from utils.multiview.wrapper import MultiviewLossFunctor
 
@@ -34,6 +34,9 @@ def numpify(data):
 @hydra.main(version_base=None, config_path='./config', config_name='base')
 def run(cfg: DictConfig) -> None:
     
+    # Save config
+    save_config(cfg, pl.Path(cfg.checkpoint_dir)/'config.yaml')
+
     # Data
     training_dataloader = hydra.utils.instantiate(cfg.data.training)
     testing_dataloader = hydra.utils.instantiate(cfg.data.testing)
@@ -89,7 +92,7 @@ def run(cfg: DictConfig) -> None:
                 eval(model, testing_dataloader, cfg.device, 
                      cfg.num_eval_batches, log=log)
             
-            if cfg.batches_before_save and batch_i + 1 % cfg.batches_before_save == 0:
+            if cfg.batches_before_save and (batch_i % cfg.batches_before_save) == 0:
                 save_model(model, pl.Path(cfg.checkpoint_dir)/f'{epoch}_{batch_i}.pth',
                            retain_n=cfg.get('retain_n_checkpoints', None))
             

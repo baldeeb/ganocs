@@ -3,6 +3,26 @@ import os
 import torch
 from models.nocs import get_nocs_resnet50_fpn
 import logging
+from omegaconf import OmegaConf
+import hydra
+
+def load_from_config(config_path, config_name, job_name='inference', model_path=None, overrides=[]):
+    hydra.core.global_hydra.GlobalHydra.instance().clear()
+    hydra.initialize(config_path=config_path, job_name=job_name)
+    cfg = hydra.compose(config_name=config_name, overrides=overrides)
+    if model_path is not None: cfg.model.load = model_path
+    model = hydra.utils.instantiate(cfg.model)
+    model.load_state_dict(torch.load(cfg.model.load))
+    logging.info(f'Loaded {cfg.model.load}')
+    return model, cfg
+
+def save_config(cfg: OmegaConf, path: pl.Path):
+    assert path.suffix == '.yaml', \
+        f'Config file must be a .yaml file. Got {path.suffix}'
+    if not path.parent.exists(): 
+        os.makedirs(path.parent)
+    with open(str(path), 'w+') as f: 
+        f.write(OmegaConf.to_yaml(cfg))
 
 def save_model(model, path, retain_n=None):
     path = pl.Path(path)
@@ -11,8 +31,8 @@ def save_model(model, path, retain_n=None):
     torch.save(model.state_dict(), path)
     logging.debug(f"Saved model to: {path}")
     if retain_n: 
-        chkpts = sorted(path.parent.glob('*.pth'))
-        chkpts = chkpts[-retain_n:]
+        chkpts = sorted(path.parent.glob('*.pth'), reverse=True)
+        chkpts = chkpts[retain_n:]
         for c in chkpts: os.remove(c)
             
         

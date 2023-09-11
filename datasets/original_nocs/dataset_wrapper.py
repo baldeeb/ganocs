@@ -77,7 +77,7 @@ class NOCSDataloader():
                 continue
             # # These are ugly feature of the original dataset.
             except BadDataException as e:
-                logging.debug(f'Bad data in dataset {set_i}\n{e}')
+                logging.debug(f'Bad data in dataset {source_i}\n{e}')
                 continue
             out.append(data)
         if self._collate is not None: return self._collate(out)

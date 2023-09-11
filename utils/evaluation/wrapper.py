@@ -117,10 +117,6 @@ def eval(model, dataloader, device, num_batches=None, log:callable=wandb.log):
                 
                 # IoU
                 matched_idxs, labels = model.roi_heads.assign_targets_to_proposals([result['boxes'].cpu()], [target['boxes'].cpu()], [target['labels'].cpu()])
-                # print_Rts = lambda p, a, b : print(f'{p} Rts-s: {len(a)} - {len(b)}  Shapes: {a[0].shape if len(a) else None} - {b[0].shape if len(b) else None}')
-                # print_Rts('pred', pred_Rt, pred_s)
-                # print_Rts('gt', gt_Rt, gt_s)
-                # print(f'labels: {labels} matched_idxs: {matched_idxs}')
                 iou_vals = []
                 # TODO: batchify this
                 for gt_i, pred_i in zip(matched_idxs[0], range(len(matched_idxs[0]))):
