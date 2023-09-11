@@ -11,17 +11,11 @@ import cv2
 from skimage import exposure
 import glob
 import json
-
+from .exceptions import BadDataException
 ############################################################
 #  Datasets
 ############################################################
 DEFAULT_DATASET_YEAR = 2014
-
-
-class BadDataException(Exception):
-    def __init__(self, message):
-        super().__init__(message)
-
 
 class NOCSDataset(utils.Dataset):
     """Generates the NOCS dataset."""

@@ -1,8 +1,7 @@
 import torch
-from torch.utils.data import DataLoader
+from .exceptions import BadDataException
 from .utils import (extract_bboxes, minimize_mask,)
 import numpy as np
-import pathlib as pl
 import logging
 
 class NOCSDataloader():
@@ -77,9 +76,9 @@ class NOCSDataloader():
                 logging.debug(f'Exhausted dataset {source_i}\n{e}')
                 continue
             # # These are ugly feature of the original dataset.
-            # except BadDataException as e:
-            #     logging.debug(f'Bad data in dataset {set_i}\n{e}')
-            #     continue
+            except BadDataException as e:
+                logging.debug(f'Bad data in dataset {set_i}\n{e}')
+                continue
             out.append(data)
         if self._collate is not None: return self._collate(out)
         return out
