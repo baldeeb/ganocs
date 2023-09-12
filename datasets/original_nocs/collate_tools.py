@@ -8,7 +8,10 @@ def collate_fn(batch):
     for _, data in enumerate(batch):
 
         depth           = torch.as_tensor(data[1]).float()
-        intrinsics      = torch.as_tensor(data[2]).float()
+
+        if data[2] is None: intrinsics = None
+        else: intrinsics = torch.as_tensor(data[2]).float()
+        
         labels          = torch.as_tensor(data[3]).type(torch.int64)
         b               = torch.as_tensor(data[4])[:, :4].float()  # 5 dim, last dim might be class or anchor
         boxes           = torch.stack([b[:, 1], b[:, 0], b[:, 3], b[:, 2]], dim=1) # width min, height min, width max, height max

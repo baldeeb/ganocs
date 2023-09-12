@@ -1,0 +1,17 @@
+defaults:
+  - base
+  - _self_
+
+model:
+  load: /home/baldeeb/Code/pytorch-NOCS/checkpoints/base/2023-09-11_15-37-15/84_99.pth
+    
+  # rpn_nms_thresh: 0.3   # default -> 0.7
+  # rpn_score_thresh: 0.5 # default -> 0.0
+
+  box_score_thresh: 0.7
+  box_nms_thresh:   0.3
+
+logger:
+  name: eval_base 
+
+num_eval_batches: 10

@@ -59,10 +59,9 @@ def draw_boxes(image, Rts, Ss, intrinsic):
 
 def eval(model, dataloader, device, num_batches=None, log:callable=wandb.log):
     with torch.no_grad():
-        det_keys = ['nocs', 'masks', 'labels', 'boxes', 'scores']
-        score_threshold = 0.8
         model_training = model.training
         model.eval()
+        if num_batches is None: num_batches = len(dataloader)
         for batch_i, (images, targets) in tqdm(enumerate(dataloader), 
                                                total=num_batches,
                                                leave=False, desc='Eval Loop'):
@@ -71,70 +70,90 @@ def eval(model, dataloader, device, num_batches=None, log:callable=wandb.log):
             
             for result, image, target in zip(results, images, targets):
 
-                # Discard samples with low score
-                # TODO: determine if this ought to be done in the model
-                #       when using eval mode.
-                select = result['scores'] > score_threshold
-                if not any(select): continue
-                for k in det_keys: result[k] = result[k][select]
-
                 pred_bin_masks = result['masks'] > 0.5
-
-                # l2 nocs loss
-                loss = l2_nocs_image_loss(result['nocs'], target['nocs'], 
-                                          pred_bin_masks, device=device)
                 
-                # align
-                # TODO: Move to the GPU driven align function implemented by BYOC
-                _to_ndarray = lambda a : a.clone().detach().cpu().numpy() if isinstance(a, torch.Tensor) else a
-                pred_Rt, pred_s = [], []
-                for mask, nocs in zip(_to_ndarray(pred_bin_masks), _to_ndarray(result['nocs'])):
-                    Rt, s, _ = align(mask, nocs, _to_ndarray(target['depth']), _to_ndarray(target['intrinsics']))
-                    pred_Rt.append(Rt), pred_s.append(s)
-
-                gt_Rt, gt_s = [], []
-                for mask in _to_ndarray(target['masks']):
-                    mask = mask[None]
-                    nocs = _to_ndarray(target['nocs'] * mask)
-                    Rt, s, _ = align(mask, nocs, _to_ndarray(target['depth']), _to_ndarray(target['intrinsics']))
-                    gt_Rt.append(Rt), gt_s.append(s)
-                
-                # 3d boxes
-                # TODO this process, like IOU calculations need to get 3D boxes. Avoid redundant calculations.
-                pred_bboxes_image = draw_boxes(image, _to_ndarray(pred_Rt), _to_ndarray(pred_s), _to_ndarray(target['intrinsics']),)
-                gt_bboxes_image   = draw_boxes(image, _to_ndarray(gt_Rt),   _to_ndarray(gt_s),   _to_ndarray(target['intrinsics']),)
-                
-                # nocs images
-                cumm_nocs = merge_nocs_to_single_image(result['nocs'], pred_bin_masks, )
-                gt_nocs = (target['nocs']*255).clone().detach().numpy().astype(int).transpose(1,2,0)
+                # String descriptions
+                descriptions = [f'cls: {l.item()} - {s.item()}%' \
+                                for l, s in zip(result['labels'], 
+                                                result['scores'])]
 
                 # segmentation and 2d boxes
                 int_image = (image.clone().detach() * 255.0).type(torch.uint8).cpu()
                 seged_img = draw_segmentation_masks(int_image, pred_bin_masks.squeeze(1).clone().detach().cpu(), alpha=0.6)
                 seged_img = seged_img.permute(1,2,0).clone().detach().numpy().astype(int)
-                boxes_img = draw_bounding_boxes(int_image, boxes=result['boxes'], width=4)
+                boxes_img = draw_bounding_boxes(int_image, boxes=result['boxes'], 
+                                                width=4, labels=descriptions )
                 boxes_img = boxes_img.permute(1,2,0).clone().detach().numpy().astype(int)
                 
-                # IoU
-                matched_idxs, labels = model.roi_heads.assign_targets_to_proposals([result['boxes'].cpu()], [target['boxes'].cpu()], [target['labels'].cpu()])
-                iou_vals = []
-                # TODO: batchify this
-                for gt_i, pred_i in zip(matched_idxs[0], range(len(matched_idxs[0]))):
-                    if pred_Rt[pred_i].sum() == 0: continue
-                    iou_vals.append(
-                        iou(gt_Rt[gt_i][0], pred_Rt[pred_i][0], 
-                            gt_s[gt_i][0],  pred_s[pred_i][0]))
-
-                log({
-                    'eval_nocs_loss':    loss,
-                    'pred_bboxes':       wandb.Image(pred_bboxes_image),
-                    'gt_bboxes':         wandb.Image(gt_bboxes_image),
-                    'pred_nocs':         wandb.Image(cumm_nocs),
-                    'gt_nocs':           wandb.Image(gt_nocs),
+                log_results = { # MRCNN
                     'pred_segmentation': wandb.Image(seged_img),
                     'pred_boxes':        wandb.Image(boxes_img),
-                    'IoU':               np.mean(iou_vals)
-                })
+                }                    
+
+                if callable(getattr(model.roi_heads, "has_nocs", None)) and \
+                    model.roi_heads.has_nocs():
+                    # l2 nocs loss
+                    loss = l2_nocs_image_loss(result['nocs'], target['nocs'], 
+                                            pred_bin_masks, device=device)
+                    
+                    # align
+                    # TODO: Move to the GPU driven align function implemented by BYOC
+                    _to_ndarray = lambda a : a.clone().detach().cpu().numpy() \
+                                            if isinstance(a, torch.Tensor) else a
+                    pred_Rt, pred_s = [], []
+                    for mask, nocs in zip(_to_ndarray(pred_bin_masks), 
+                                        _to_ndarray(result['nocs'])):
+                        Rt, s, _ = align(mask, nocs, 
+                                        _to_ndarray(target['depth']), 
+                                        _to_ndarray(target['intrinsics']))
+                        pred_Rt.append(Rt), pred_s.append(s)
+
+                    gt_Rt, gt_s = [], []
+                    for mask in _to_ndarray(target['masks']):
+                        mask = mask[None]
+                        nocs = _to_ndarray(target['nocs'] * mask)
+                        Rt, s, _ = align(mask, nocs, 
+                                         _to_ndarray(target['depth']), 
+                                         _to_ndarray(target['intrinsics']))
+                        gt_Rt.append(Rt), gt_s.append(s)
+                  
+                    # 3d boxes
+                    # TODO this process, like IOU calculations need to get 3D boxes. Avoid redundant calculations.
+                    pred_bboxes_image = draw_boxes(image, 
+                                                   _to_ndarray(pred_Rt), 
+                                                   _to_ndarray(pred_s), 
+                                                   _to_ndarray(target['intrinsics']),)
+                    gt_bboxes_image   = draw_boxes(image, 
+                                                   _to_ndarray(gt_Rt),   
+                                                   _to_ndarray(gt_s),   
+                                                   _to_ndarray(target['intrinsics']),)
+                    
+                    # nocs images
+                    cumm_nocs = merge_nocs_to_single_image(result['nocs'], pred_bin_masks, )
+                    gt_nocs = (target['nocs']*255).clone().detach().numpy().astype(int).transpose(1,2,0)
+
+                    # IoU
+                    matched_idxs, labels = model.roi_heads.assign_targets_to_proposals(
+                                                                    [result['boxes'].cpu()], 
+                                                                    [target['boxes'].cpu()], 
+                                                                    [target['labels'].cpu()])
+                    iou_vals = []
+                    # TODO: batchify this
+                    for gt_i, pred_i in zip(matched_idxs[0], range(len(matched_idxs[0]))):
+                        if pred_Rt[pred_i].sum() == 0: continue
+                        iou_vals.append(
+                            iou(gt_Rt[gt_i][0], pred_Rt[pred_i][0], 
+                                gt_s[gt_i][0],  pred_s[pred_i][0]))
+                    log_results.update({
+                        # NOCS
+                        'nocs_l2_loss':      loss,
+                        'pred_bboxes':       wandb.Image(pred_bboxes_image),
+                        'gt_bboxes':         wandb.Image(gt_bboxes_image),
+                        'pred_nocs':         wandb.Image(cumm_nocs),
+                        'gt_nocs':           wandb.Image(gt_nocs),
+                        'IoU':               np.mean(iou_vals)
+                    })
+                log(log_results)
             if num_batches is not None and batch_i >= num_batches: break
         if model_training: model.train()
     

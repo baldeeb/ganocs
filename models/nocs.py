@@ -134,12 +134,6 @@ class NOCS(MaskRCNN):
                                             new_size,
                                             original_sizes.long(),)
         return result
-    
-    def parameters(self, recurse: bool = True, keys: list = None) -> Iterator[nn.Parameter]:
-        for n, p in super().named_parameters(recurse=recurse):
-            if keys is None: yield p
-            elif any([k in n for k in keys]): yield p
-
 
 # TODO: remove this override stuff and make it so that if a model is loaded
 # it has to match the model's config

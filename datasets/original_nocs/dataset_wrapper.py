@@ -21,11 +21,12 @@ class NOCSDataloader():
     def batch_size(self): return self._batch_size
 
     def _load_data(self, data_info, class_map):
-        self._sources, self._source_weights = [], []
+        self._sources, self._source_weights, self._source_intrinsics = [], [], []
         for k, v in data_info.items(): 
             assert k not in self._sources, 'Same data source was added twice'
             self._sources.append(k)
             self._source_weights.append(v.weight)
+            self._source_intrinsics.append(v.intrinsics)
             if k == 'Real':
                 self._dataset.load_real_scenes(v.dataset_dir)
             elif k == 'CAMERA':
@@ -128,7 +129,7 @@ class NOCSDataloader():
 
         return (image, 
                 depth, 
-                self._dataset.intrinsics,  
+                self._source_intrinsics[source_i],  
                 # image_metas,
                 gt_class_ids,
                 gt_boxes, 

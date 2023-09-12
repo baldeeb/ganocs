@@ -24,16 +24,16 @@ def save_config(cfg: OmegaConf, path: pl.Path):
     with open(str(path), 'w+') as f: 
         f.write(OmegaConf.to_yaml(cfg))
 
-def save_model(model, path, retain_n=None):
-    path = pl.Path(path)
+def save_model(model, path, epoch, batch, retain_n=None):
+    path = pl.Path(path) / f'{epoch:0>4d}_{batch:0>6d}.pth'
     if not path.parent.exists():
         os.makedirs(path.parent)
     torch.save(model.state_dict(), path)
     logging.debug(f"Saved model to: {path}")
     if retain_n: 
-        chkpts = sorted(path.parent.glob('*.pth'), reverse=True)
-        chkpts = chkpts[retain_n:]
-        for c in chkpts: os.remove(c)
+        chkpts = [f.name for f in path.parent.glob('*.pth')]
+        chkpts = sorted(chkpts, reverse=True)
+        for c in chkpts[retain_n:]: os.remove(path.parent/c)
             
         
 def load_nocs(checkpoint, **kwargs):

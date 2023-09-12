@@ -8,7 +8,7 @@ logger:
   name: gan
 
 device:              cuda:1
-checkpoint_dir:     ./checkpoints/${logger.name}/${now:%Y-%m-%d_%H-%M-%S}
+checkpoint_dir: ./checkpoints/${logger.project}/${logger.name}/${now:%Y-%m-%d_%H-%M-%S}
 
 model:
   nocs_loss:

@@ -1,5 +1,5 @@
 defaults:
-  - model: base
+  - model: mrcnn
   - data: original_nocs
   - optimization: frozen_backbone
   - _self_
@@ -8,7 +8,7 @@ log: true                 # Whether to push logs to wandb
 logger:
   project: gan-nocs
   entity:  rpm-collab
-  name:    base
+  name:    mask-rcnn
 
 device: cuda:0
 checkpoint_dir: ./checkpoints/${logger.project}/${logger.name}/${now:%Y-%m-%d_%H-%M-%S}
@@ -19,8 +19,9 @@ batches_before_save: 100  # Batches before saving a checkpoint
 batches_before_eval: 50   # Batches before evaluating
 num_eval_batches: 5       # Batches to evaluate on
 
-model:
-  num_classes: 7
+# model:
+#   num_classes: 7
+#   override_num_classes: True
   
 hydra:
     run:

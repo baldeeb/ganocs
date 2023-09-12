@@ -17,7 +17,3 @@ nocs_loss:
 nocs_num_bins: 32
 nocs_loss_mode: classification
 multiheaded_nocs: True
-
-# postprocessing config
-rpn_nms_thresh: 0.3
-rpn_score_thresh: 0.7

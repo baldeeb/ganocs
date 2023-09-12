@@ -20,7 +20,7 @@ DEFAULT_DATASET_YEAR = 2014
 class NOCSDataset(utils.Dataset):
     """Generates the NOCS dataset."""
 
-    def __init__(self, synset_names, subset, config, intrinsics=None, depth_scale=None, verbose=False):
+    def __init__(self, synset_names, subset, config, depth_scale=None, verbose=False):
         self._image_ids = []
         self.image_info = []
         # Background is always the first class
@@ -32,7 +32,6 @@ class NOCSDataset(utils.Dataset):
         assert subset in ['train', 'val', 'test']
 
         self.config = config
-        self.intrinsics = np.array(intrinsics)
         self.depth_scale = depth_scale
         self.source_image_ids = {}
 

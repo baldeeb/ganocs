@@ -21,6 +21,3 @@ nocs_num_bins: 1
 nocs_loss_mode: regression
 multiheaded_nocs: True
 
-# postprocessing config
-rpn_nms_thresh: 0.3
-rpn_score_thresh: 0.7
