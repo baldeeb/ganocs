@@ -1,7 +1,13 @@
-_target_: torchvision.models.detection.maskrcnn_resnet50_fpn
+# _target_: torchvision.models.detection.maskrcnn_resnet50_fpn
+
+
+_target_: models.mrcnn.maskrcnn_resnet50_fpn_adjusted_class_count
+num_classes: 7
 
 weights: 
   _target_: hydra.utils.get_object
   path: torchvision.models.detection.mask_rcnn.MaskRCNN_ResNet50_FPN_Weights.DEFAULT
+
+box_score_thresh: 0.7
 
 load: # not used

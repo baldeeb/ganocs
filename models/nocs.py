@@ -5,7 +5,7 @@ import torch
 
 from typing import Any, Optional, Iterator
 from torch import nn
-from torchvision.models.detection.mask_rcnn import MaskRCNN_ResNet50_FPN_Weights
+from torchvision.models.detection.mask_rcnn import MaskRCNN_ResNet50_FPN_Weights, maskrcnn_resnet50_fpn
 from torchvision.models.detection.backbone_utils import (_validate_trainable_layers, 
                                                          _resnet_fpn_extractor)
 from torchvision.models.detection._utils import overwrite_eps
@@ -180,13 +180,11 @@ def get_nocs_resnet50_fpn(
             overwrite_eps(model, 0.0)
 
         if override_num_classes:
-            model.roi_heads.box_predictor.cls_score = nn.Linear(
-                model.roi_heads.box_predictor.cls_score.in_features, num_classes
-            )
-            model.roi_heads.box_predictor.num_classes = num_classes
-            model.roi_heads.mask_predictor.mask_fcn_logits = nn.Conv2d(
-                model.roi_heads.mask_predictor.mask_fcn_logits.in_channels, num_classes, 1, 1, 0
-            )
+            heads = maskrcnn_resnet50_fpn(progress=progress,
+                            num_classes=num_classes,
+                            **kwargs).roi_heads
+            model.roi_heads = heads
+
 
             model.roi_heads = RoIHeadsWithNocs.from_torchvision_roiheads(model.roi_heads, **kwargs)
     return model
