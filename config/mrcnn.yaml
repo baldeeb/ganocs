@@ -21,7 +21,6 @@ num_eval_batches: 5       # Batches to evaluate on
 
 # model:
 #   num_classes: 7
-#   override_num_classes: True
   
 hydra:
     run:
