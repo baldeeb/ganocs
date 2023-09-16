@@ -145,11 +145,11 @@ from datasets.original_nocs.visualization_utils import visualize_original_nocs_d
 import matplotlib.pyplot as plt
 import torch
 
-@hydra.main(version_base=None, config_path="./config", config_name="original_data")
+@hydra.main(version_base=None, config_path="./config", config_name="base")
 def visualize_data(cfg: DictConfig):
     datasets = {
-        'testing': hydra.utils.instantiate(cfg.data.testing),
         'training': hydra.utils.instantiate(cfg.data.training),
+        'testing': hydra.utils.instantiate(cfg.data.testing),
         # 'habitat': hydra.utils.instantiate(cfg.data.base),
     }
 
@@ -168,7 +168,16 @@ def visualize_data(cfg: DictConfig):
             fig, axs_grid = plt.subplots(B, 3)
             for img, info, axs in zip(images, information, axs_grid):
                 depth, masks, nocs, labels, boxes, scales, camera_pose, intrinsics, _ = tuple(info.values())
-                visualize_original_nocs_data_point(axs, img, depth, masks, boxes, labels, nocs)
+                
+                # get class names
+                names = []
+                for l in labels:
+                    for i in dataset._dataset.class_info:
+                        if i['id'] == l:
+                            names.append(i['name'])
+                            break
+                
+                visualize_original_nocs_data_point(axs, img, depth, masks, boxes, names, nocs)
             # fig, axs = plt.subplots(1, 3)
             # draw_2d_boxes_with_labels(axs[0], image, masks, boxes, labels)
             # axs[1].imshow(depth)
