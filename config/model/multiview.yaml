@@ -1,5 +1,5 @@
 defaults:
-  - one_class
+  - base
   - _self_
 
 multiview:
