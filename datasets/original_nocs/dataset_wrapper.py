@@ -21,12 +21,16 @@ class NOCSDataloader():
     def batch_size(self): return self._batch_size
 
     def _load_data(self, data_info, class_map):
-        self._sources, self._source_weights, self._source_intrinsics = [], [], []
+        self._sources = []
+        self._ignore_source_nocs = [] 
+        self._source_weights = [] 
+        self._source_intrinsics = []
         for k, v in data_info.items(): 
             assert k not in self._sources, 'Same data source was added twice'
             self._sources.append(k)
             self._source_weights.append(v.weight)
             self._source_intrinsics.append(v.intrinsics)
+            self._ignore_source_nocs.append(v.get('ignore_nocs', False))
             if k == 'Real':
                 self._dataset.load_real_scenes(v.dataset_dir)
             elif k == 'CAMERA':
@@ -111,7 +115,7 @@ class NOCSDataloader():
     
     def _get_data(self, source_i):
         image_id = self._get_image_id(source_i)
-        image, depth, image_metas, gt_boxes, gt_masks, gt_coords, gt_domain_label, scale= \
+        image, depth, image_metas, gt_boxes, gt_masks, gt_coords, gt_no_nocs, scale= \
             load_image_gt(self._dataset, self._dataset.config, image_id, augment=self.augment)
         
         if np.sum(gt_boxes) <= 0:
@@ -135,17 +139,17 @@ class NOCSDataloader():
                 gt_boxes, 
                 gt_masks, 
                 gt_coords, 
-                gt_domain_label,
+                gt_no_nocs or self._ignore_source_nocs[source_i],
                 scale)
 
 
 def load_image_gt(dataset, config, image_id, augment=False):
     # Load image and mask
     if augment and dataset.subset == 'train':
-        image, mask, coord, class_ids, scales, domain_label = dataset.load_augment_data(image_id)
+        image, mask, coord, class_ids, scales, no_nocs = dataset.load_augment_data(image_id)
     else:
         image = dataset.load_image(image_id)
-        mask, coord, class_ids, scales, domain_label = dataset.load_mask(image_id)
+        mask, coord, class_ids, scales, no_nocs = dataset.load_mask(image_id)
     
     depth = dataset.load_depth(image_id)
     if depth is None: depth = np.zeros((image.shape[0], image.shape[1], 1))
@@ -165,5 +169,5 @@ def load_image_gt(dataset, config, image_id, augment=False):
 
     image_meta = None
 
-    return (image, depth, image_meta, bbox, mask, coord, domain_label, scales)
+    return (image, depth, image_meta, bbox, mask, coord, no_nocs, scales)
 
