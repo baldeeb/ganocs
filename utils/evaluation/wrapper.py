@@ -29,20 +29,24 @@ def merge_nocs_to_single_image(nocs, masks=None, overlap_threshold=0.1):
             Boxes are process in order of score.
     '''
     nocs = nocs.permute(0,2,3,1)
-    if masks is not None: 
-        masks = masks.permute(0,2,3,1)
-        merged = torch.zeros_like(nocs[0])
-        merged_mask = torch.zeros_like(masks[0])
-        for n, m in zip(nocs, masks):
-            if overlap_threshold and \
-               (merged_mask * m).sum() > (m.sum() * overlap_threshold): 
-                continue
-            merged_mask += m
-            merged += n * m
-    else: 
-        merged = torch.cat([n for n in nocs]).sum(dim=0) 
     
-    return (merged.clone().detach() * 255.0).int().cpu().numpy()
+    if len(nocs) == 0:
+        merged = torch.zeros((1, *nocs.shape[1:])).int().cpu().numpy()
+    else:
+        if masks is not None: 
+            masks = masks.permute(0,2,3,1)
+            merged = torch.zeros_like(nocs[0])
+            merged_mask = torch.zeros_like(masks[0])
+            for n, m in zip(nocs, masks):
+                if overlap_threshold and \
+                (merged_mask * m).sum() > (m.sum() * overlap_threshold): 
+                    continue
+                merged_mask += m
+                merged += n * m
+        else: 
+            merged = torch.cat([n for n in nocs]).sum(dim=0) 
+        merged = (merged.clone().detach() * 255.0).int().cpu().numpy()
+    return merged
 
 
 def draw_box(image, Rt, s, intrinsic):
@@ -132,27 +136,29 @@ def eval(model, dataloader, device, num_batches=None, log:callable=wandb.log):
                     cumm_nocs = merge_nocs_to_single_image(result['nocs'], pred_bin_masks, )
                     gt_nocs = (target['nocs']*255).clone().detach().numpy().astype(int).transpose(1,2,0)
 
-                    # IoU
-                    matched_idxs, labels = model.roi_heads.assign_targets_to_proposals(
-                                                                    [result['boxes'].cpu()], 
-                                                                    [target['boxes'].cpu()], 
-                                                                    [target['labels'].cpu()])
-                    iou_vals = []
-                    # TODO: batchify this
-                    for gt_i, pred_i in zip(matched_idxs[0], range(len(matched_idxs[0]))):
-                        if pred_Rt[pred_i].sum() == 0: continue
-                        iou_vals.append(
-                            iou(gt_Rt[gt_i][0], pred_Rt[pred_i][0], 
-                                gt_s[gt_i][0],  pred_s[pred_i][0]))
                     log_results.update({
-                        # NOCS
                         'nocs_l2_loss':      loss,
                         'pred_bboxes':       wandb.Image(pred_bboxes_image),
                         'gt_bboxes':         wandb.Image(gt_bboxes_image),
                         'pred_nocs':         wandb.Image(cumm_nocs),
                         'gt_nocs':           wandb.Image(gt_nocs),
-                        'IoU':               np.mean(iou_vals)
                     })
+
+                    # IoU
+                    if len(result['boxes']) > 0 and len(target['boxes']) > 0:
+                        matched_idxs, labels = model.roi_heads.assign_targets_to_proposals(
+                                                                        [result['boxes'].cpu()], 
+                                                                        [target['boxes'].cpu()], 
+                                                                        [target['labels'].cpu()])
+                        iou_vals = []
+                        # TODO: batchify this
+                        for gt_i, pred_i in zip(matched_idxs[0], range(len(matched_idxs[0]))):
+                            if pred_Rt[pred_i].sum() == 0: continue
+                            iou_vals.append(
+                                iou(gt_Rt[gt_i][0], pred_Rt[pred_i][0], 
+                                    gt_s[gt_i][0],  pred_s[pred_i][0]))
+                        log_results['IoU'] = np.mean(iou_vals)
+
                 log(log_results)
             if num_batches is not None and batch_i >= num_batches: break
         if model_training: model.train()
