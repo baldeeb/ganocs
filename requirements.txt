@@ -1,9 +1,14 @@
 conda create -n torch-nocs python=3.10
+conda activate torch-nocs
 conda install -c conda-forge pycocotools
 conda install pytorch torchvision torchaudio pytorch-cuda=11.7 -c pytorch -c nvidia
+conda install -c fvcore -c iopath -c conda-forge fvcore iopath
 conda install pytorch3d -c pytorch3d
 
-pip install hydra-core --update
+pip install hydra-core
 
 # for the original nocs dataset
 conda install -c conda-forge scikit-image
+pip install tqdm
+pip install wandb
+pip install opencv-python
