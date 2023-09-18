@@ -1,6 +1,6 @@
 import wandb
 import hydra
-from omegaconf import DictConfig
+from omegaconf import DictConfig, OmegaConf
 import torch
 from utils.evaluation.wrapper import eval
 import logging
@@ -14,7 +14,7 @@ def targets2device(targets, device):
 
 
 
-@hydra.main(version_base=None, config_path='./config', config_name='base')
+@hydra.main(version_base=None, config_path='./config', config_name='eval')
 def run(cfg: DictConfig) -> None:
     
     # Data
@@ -22,7 +22,7 @@ def run(cfg: DictConfig) -> None:
 
     # Logger
     if cfg.log: 
-        wandb.init(**cfg.logger, config=cfg)
+        wandb.init(**cfg.logger, config=OmegaConf.to_container(cfg))
         log = wandb.log
     else: log = lambda x: None
 

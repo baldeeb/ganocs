@@ -5,7 +5,7 @@ import logging
 import wandb
 
 import hydra
-from omegaconf import DictConfig
+from omegaconf import DictConfig, OmegaConf
 
 import torch
 
@@ -41,7 +41,7 @@ def run(cfg: DictConfig) -> None:
 
     # Logger
     if cfg.log: 
-        wandb.init(**cfg.logger, config=cfg)
+        wandb.init(**cfg.logger, config=OmegaConf.to_container(cfg))
         log = wandb.log
     else: log = lambda x: None
 
