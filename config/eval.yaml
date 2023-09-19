@@ -1,16 +1,17 @@
 defaults:
   - base
   - _self_
-
+device: cpu
 model:
   load: /home/baldeeb/Code/pytorch-NOCS/checkpoints/gan-nocs/nocs-new-roi/2023-09-16_11-44-34/0009_000000.pth
     
-  # rpn_nms_thresh: 0.3   # default -> 0.7
+  #rpn_nms_thresh: 0.7   # default -> 0.7
   # rpn_score_thresh: 0.5 # default -> 0.0
 
   box_score_thresh: 0.7
   # box_nms_thresh:   0.3
 
+log_mAP: false
 logger:
   name: eval_base 
 

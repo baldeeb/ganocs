@@ -2,7 +2,7 @@ import torch
 import numpy as np  
 import wandb
 from utils.evaluation.nocs_image_loss import l2_nocs_image_loss
-from utils.evaluation.tools import iou
+from utils.evaluation.tools import iou, compute_degree_cm_mAP
 from utils.visualization import draw_3d_boxes
 from torchvision.utils import draw_segmentation_masks, draw_bounding_boxes
 
@@ -61,11 +61,12 @@ def draw_boxes(image, Rts, Ss, intrinsic):
     assert img is not None, 'Something went wront!'
     return img
 
-def eval(model, dataloader, device, num_batches=None, log:callable=wandb.log):
+def eval(model, dataloader, device, log_mAP=False,num_batches=None, log:callable=wandb.log):
     with torch.no_grad():
         model_training = model.training
         model.eval()
         if num_batches is None: num_batches = len(dataloader)
+        if log_mAP: iou_25, iou_50, img_num = 0, 0, 0
         for batch_i, (images, targets) in tqdm(enumerate(dataloader), 
                                                total=num_batches,
                                                leave=False, desc='Eval Loop'):
@@ -161,6 +162,12 @@ def eval(model, dataloader, device, num_batches=None, log:callable=wandb.log):
 
                 log(log_results)
             if num_batches is not None and batch_i >= num_batches: break
+        aps = tools.compute_degree_cm_mAP(final_results, synset_names, log_dir,
+                                                                    degree_thresholds = range(0, 61, 1),
+                                                                    shift_thresholds= np.linspace(0, 1, 31)*15,  
+                                                                    iou_3d_thresholds=np.linspace(0, 1, 101),
+                                                                    iou_pose_thres=0.1,
+                                                                    use_matches_for_pose=True)
         if model_training: model.train()
     
 

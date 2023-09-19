@@ -29,12 +29,15 @@ def run(cfg: DictConfig) -> None:
     # Model
     model = hydra.utils.instantiate(cfg.model)
     assert cfg.model.load, 'No model to load...'
-    model.load_state_dict(torch.load(cfg.model.load))
+    if cfg.device=="cpu":
+        model.load_state_dict(torch.load(cfg.model.load, map_location='cpu'))
+    else:  
+        model.load_state_dict(torch.load(cfg.model.load))
     logging.info(f'Loaded {cfg.model.load}')
     model.to(cfg.device).eval()
 
-    eval(model, testing_dataloader, cfg.device, 
-         num_batches=cfg.num_eval_batches, log=log) 
+    eval(model, testing_dataloader, cfg.device,cfg.log_mAP,
+         num_batches=cfg.num_eval_batches,log=log) 
 
 
 if __name__ == '__main__':
