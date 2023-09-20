@@ -73,11 +73,14 @@ class RoIHeadsWithNocs(RoIHeads):
             keypoint_roi_pool, keypoint_head, keypoint_predictor,
         )
 
-        self.nocs_heads = nocs_heads
+        # TODO: remove
         self.cache_results, self._cache = cache_results, None
+        # TODO: remove pass through "**kwargs" instead
         self.nocs_loss_mode = nocs_loss_mode
         self.ignore_nocs = False
         self.nocs_loss = nocs_loss
+        
+        self.nocs_heads = nocs_heads
         self._kwargs = kwargs
         self._training_mode = None
         self._multiview_loss_mode = None
@@ -205,8 +208,7 @@ class RoIHeadsWithNocs(RoIHeads):
 
                 # Add NOCS to Loss ##########################################################################################
                 if self.has_nocs():
-                    device = mask_logits.device
-                    gt_nocs = [t["nocs"].to(device) for t in targets]
+                    gt_nocs = [t["nocs"].to(mask_logits.device) for t in targets]
 
                     if len(targets)> 0 and 'depth' in targets[0]:
                         depth = [t['depth'] for t in targets]
@@ -225,7 +227,7 @@ class RoIHeadsWithNocs(RoIHeads):
                                                            pos_matched_idxs,
                                                            reduction=reduction,
                                                            loss_fx=self.nocs_loss,
-                                                           mode=self.nocs_loss_mode,
+                                                           nocs_loss_mode=self.nocs_loss_mode,
                                                            depth=depth,
                                                            samples_with_valid_targets=nocs_gt_available,
                                                            **self._kwargs)
