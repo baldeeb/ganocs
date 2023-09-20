@@ -5,13 +5,7 @@ device: cpu
 
 log: True
 model:
-  load: checkpoints/gan-nocs/base-no-real/2023-09-22_17-49-23/0199_000165.pth
-    
-  #rpn_nms_thresh: 0.7   # default -> 0.7
-  # rpn_score_thresh: 0.5 # default -> 0.0
-
-  box_score_thresh: 0.7
-  # box_nms_thresh:   0.3
+  load: checkpoints/gan-nocs/base-nocs-no-real-labeles/2023-09-18_11-03-48/0199_000165.pth
 
 mAP_configs:
   degree_thresholds_start: 0
@@ -31,6 +25,6 @@ mAP_configs:
 
 
 logger:
-  name: test_umeyama
+  name: eval-base-
 
-num_eval_batches: 10
+num_eval_batches: 50
