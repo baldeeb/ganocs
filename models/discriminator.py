@@ -72,7 +72,7 @@ class ContextAwareDiscriminator(nn.Module):
 
     def forward(self, x, ctx):
         for m in self._model_list:
-            x = m (x, ctx)
+            x = m(x, ctx)
         return x
 
 class DiscriminatorWithOptimizer(Discriminator):
@@ -92,6 +92,8 @@ class DiscriminatorWithOptimizer(Discriminator):
         if logger is None:
             self.log = {}
             self.logger = lambda x: self.log.update(x)
+        else:
+            self.logger = logger
     
     def _step(self, x, real:bool):
         self.optim.zero_grad()
@@ -102,30 +104,32 @@ class DiscriminatorWithOptimizer(Discriminator):
         self.optim.step()
         return loss.item(), x.clone().detach()
 
+    def _log(self, real_loss, fake_loss, real_values, fake_values):
+        real_acc, fake_acc = self.accuracy(real_values, fake_values)
+        self.logger({'discriminator_real_loss': real_loss,
+                     'discriminator_fake_loss': fake_loss,
+                     'discriminator_real_accuracy': real_acc,
+                     'discriminator_fake_accuracy': fake_acc})
+
     def update(self, real, fake):
         real_loss, real_values = self._step(real, True)
         fake_loss, fake_values = self._step(fake, False)
 
-        acc = self.accuracy(real_values, fake_values)
-        self.logger({'discriminator_real_loss': real_loss,
-                     'discriminator_fake_loss': fake_loss,
-                     'discriminator_accuracy': acc})
+        self._log(real_loss, fake_loss, real_values, fake_values)
+        
         return real_loss + fake_loss
 
     def accuracy(self, real, fake):
-        r = torch.sum(real > 0.5).item()
-        f = torch.sum(fake < 0.5).item()
-        return (r + f) / (real.shape[0] + fake.shape[0])    
+        r = torch.sum(real > 0.5).item() / real.shape[0]
+        f = torch.sum(fake < 0.5).item() / fake.shape[0]
+        return r, f    
 
     def _loss(self, real, fake):
         r =  self.forward(real).reshape(-1, 1)
         real_loss = binary_cross_entropy(r, torch.ones_like(r))
         f = self.forward(fake).reshape(-1, 1)
         fake_loss = binary_cross_entropy(f, torch.zeros_like(f))
-        self.logger({'discriminator_real_loss': real_loss.item(),
-                     'discriminator_fake_loss': fake_loss.item(),
-                     'discriminator_accuracy': self.accuracy(r, f)
-                     })
+        self._log(real_loss, fake_loss, r, f)
         return real_loss + fake_loss
 
 class MultiClassDiscriminatorWithOptimizer(nn.Module):
@@ -159,4 +163,4 @@ class MultiClassDiscriminatorWithOptimizer(nn.Module):
         losses = []
         for i, p in zip(class_id, x):
             losses.append(self.discriminators[str(i.item())].forward(p[None]))
-        return torch.cat(losses)
+        return torch.cat(losses) if len(losses) > 0 else torch.tensor([])
