@@ -2,7 +2,7 @@ import torch
 import numpy as np  
 import wandb
 from utils.evaluation.nocs_image_loss import l2_nocs_image_loss
-from utils.evaluation.tools import iou, compute_degree_cm_mAP
+from utils.evaluation.tools import iou, compute_mAP,compute_ap_from_matches_scores
 from utils.visualization import draw_3d_boxes
 from torchvision.utils import draw_segmentation_masks, draw_bounding_boxes
 
@@ -61,12 +61,45 @@ def draw_boxes(image, Rts, Ss, intrinsic):
     assert img is not None, 'Something went wront!'
     return img
 
-def eval(model, dataloader, device, log_mAP=False,num_batches=None, log:callable=wandb.log):
+def eval(model, dataloader, device, log_mAP_vals,synset_names,num_batches=None, log:callable=wandb.log):
     with torch.no_grad():
         model_training = model.training
         model.eval()
         if num_batches is None: num_batches = len(dataloader)
-        if log_mAP: iou_25, iou_50, img_num = 0, 0, 0
+        if log_mAP_vals.do_log:
+            num_classes = len(synset_names)
+            degree_thresholds = range(
+                log_mAP_vals.get('degree_thresholds_start', 0), 
+                log_mAP_vals.get('degree_thresholds_end', 61), 
+                log_mAP_vals.get('degree_thresholds_step', 1)
+            )
+            shift_thresholds = np.linspace(
+                log_mAP_vals.get('shift_thresholds_start', 0), 
+                log_mAP_vals.get('shift_thresholds_end', 1), 
+                log_mAP_vals.get('shift_thresholds_steps', 31)
+            ) * log_mAP_vals.get('shift_thresholds_multiplier', 15)
+            iou_3d_thresholds = np.linspace(
+                log_mAP_vals.get('iou_3d_thresholds_start', 0), 
+                log_mAP_vals.get('iou_3d_thresholds_end', 1), 
+                log_mAP_vals.get('iou_3d_thresholds_steps', 101)
+            )
+            degree_thres_list = list(degree_thresholds) + [360]
+            num_degree_thres = len(degree_thres_list)
+
+            shift_thres_list = list(shift_thresholds) + [100]
+            num_shift_thres = len(shift_thres_list)
+
+            iou_thres_list = list(iou_3d_thresholds)
+            num_iou_thres = len(iou_thres_list)
+            iou_3d_aps = np.zeros((num_classes + 1, num_iou_thres))
+            iou_pred_matches_all = [np.zeros((num_iou_thres, 0)) for _ in range(num_classes)]
+            iou_pred_scores_all  = [np.zeros((num_iou_thres, 0)) for _ in range(num_classes)]
+            iou_gt_matches_all   = [np.zeros((num_iou_thres, 0)) for _ in range(num_classes)]
+            
+            pose_aps = np.zeros((num_classes + 1, num_degree_thres, num_shift_thres))
+            pose_pred_matches_all = [np.zeros((num_degree_thres, num_shift_thres, 0)) for _  in range(num_classes)]
+            pose_gt_matches_all  = [np.zeros((num_degree_thres, num_shift_thres, 0)) for _  in range(num_classes)]
+            pose_pred_scores_all = [np.zeros((num_degree_thres, num_shift_thres, 0)) for _  in range(num_classes)]
         for batch_i, (images, targets) in tqdm(enumerate(dataloader), 
                                                total=num_batches,
                                                leave=False, desc='Eval Loop'):
@@ -112,6 +145,8 @@ def eval(model, dataloader, device, log_mAP=False,num_batches=None, log:callable
                                         _to_ndarray(target['depth']), 
                                         _to_ndarray(target['intrinsics']))
                         pred_Rt.append(Rt), pred_s.append(s)
+                    result["pred_Rt"]=pred_Rt
+                    result["scales"]=pred_s
 
                     gt_Rt, gt_s = [], []
                     for mask in _to_ndarray(target['masks']):
@@ -121,6 +156,7 @@ def eval(model, dataloader, device, log_mAP=False,num_batches=None, log:callable
                                          _to_ndarray(target['depth']), 
                                          _to_ndarray(target['intrinsics']))
                         gt_Rt.append(Rt), gt_s.append(s)
+                    target["gt_Rt"]=gt_Rt
                   
                     # 3d boxes
                     # TODO this process, like IOU calculations need to get 3D boxes. Avoid redundant calculations.
@@ -161,13 +197,57 @@ def eval(model, dataloader, device, log_mAP=False,num_batches=None, log:callable
                         log_results['IoU'] = np.mean(iou_vals)
 
                 log(log_results)
+                if log_mAP_vals.do_log:
+                    compute_mAP(result,target,device,synset_names,iou_thres_list,iou_pred_matches_all,iou_pred_scores_all,
+                                iou_gt_matches_all,log_mAP_vals.use_matches_for_pose,log_mAP_vals.iou_pose_thres,degree_thres_list, shift_thres_list,
+                                pose_pred_matches_all,pose_pred_scores_all,pose_gt_matches_all)
+                    
+
+
             if num_batches is not None and batch_i >= num_batches: break
-        aps = tools.compute_degree_cm_mAP(final_results, synset_names, log_dir,
-                                                                    degree_thresholds = range(0, 61, 1),
-                                                                    shift_thresholds= np.linspace(0, 1, 31)*15,  
-                                                                    iou_3d_thresholds=np.linspace(0, 1, 101),
-                                                                    iou_pose_thres=0.1,
-                                                                    use_matches_for_pose=True)
+            if log_mAP_vals.do_log:
+                iou_dict = {}
+                iou_dict['thres_list'] = iou_thres_list
+                for cls_id in range(1, num_classes):
+                    class_name = synset_names[cls_id]
+                    print(class_name)
+                    for s, iou_thres in enumerate(iou_thres_list):
+                        iou_3d_aps[cls_id, s] = compute_ap_from_matches_scores(iou_pred_matches_all[cls_id][s, :],
+                                                                            iou_pred_scores_all[cls_id][s, :],
+                                                                            iou_gt_matches_all[cls_id][s, :])    
+
+                iou_3d_aps[-1, :] = np.mean(iou_3d_aps[1:-1, :], axis=0)
+                
+                iou_dict['aps'] = iou_3d_aps
+
+                for i, degree_thres in enumerate(degree_thres_list):                
+                    for j, shift_thres in enumerate(shift_thres_list):
+                        # print(i, j)
+                        for cls_id in range(1, num_classes):
+                            cls_pose_pred_matches_all = pose_pred_matches_all[cls_id][i, j, :]
+                            cls_pose_gt_matches_all = pose_gt_matches_all[cls_id][i, j, :]
+                            cls_pose_pred_scores_all = pose_pred_scores_all[cls_id][i, j, :]
+
+                            pose_aps[cls_id, i, j] = compute_ap_from_matches_scores(cls_pose_pred_matches_all, 
+                                                                                    cls_pose_pred_scores_all, 
+                                                                                    cls_pose_gt_matches_all)
+
+                        pose_aps[-1, i, j] = np.mean(pose_aps[1:-1, i, j])
+                
+
+                iou_aps = iou_3d_aps
+                print('3D IoU at 25: {:.1f}'.format(iou_aps[-1, iou_thres_list.index(0.25)] * 100))
+                print('3D IoU at 50: {:.1f}'.format(iou_aps[-1, iou_thres_list.index(0.5)] * 100))
+                print('5 degree, 5cm: {:.1f}'.format(pose_aps[-1, degree_thres_list.index(5),shift_thres_list.index(5)] * 100))
+                print('5 degree, 100cm: {:.1f}'.format(pose_aps[-1, degree_thres_list.index(5),shift_thres_list.index(100)] * 100))
+                print('10 degree, 5cm: {:.1f}'.format(pose_aps[-1, degree_thres_list.index(10),shift_thres_list.index(5)] * 100))
+                print('10 degree, 10cm: {:.1f}'.format(pose_aps[-1, degree_thres_list.index(10),shift_thres_list.index(10)] * 100))
+                print('15 degree, 5cm: {:.1f}'.format(pose_aps[-1, degree_thres_list.index(15),shift_thres_list.index(5)] * 100))
+                print('15 degree, 10cm: {:.1f}'.format(pose_aps[-1, degree_thres_list.index(15),shift_thres_list.index(10)] * 100))
+                
+
+
+
         if model_training: model.train()
     
 
