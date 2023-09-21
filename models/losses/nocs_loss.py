@@ -7,6 +7,7 @@ from models.nocs_util import select_labels_in_dict
 from models.discriminator import (DiscriminatorWithOptimizer, 
                                   MultiClassDiscriminatorWithOptimizer, 
                                   ContextAwareDiscriminator)
+from typing import Union
 
 def project_on_boxes(data, boxes, matched_idxs, M)->torch.Tensor:
     """ Code borrowed from torchvision.models.detection.roi_heads.project_masks_on_boxes
@@ -41,12 +42,16 @@ def nocs_preprocessing_for_discriminator(
         raise ValueError(f'Unknown mode {mode}')
     return prediction
 
-def discriminator_as_loss(discriminator:DiscriminatorWithOptimizer, 
+def discriminator_as_loss(discriminator:Union[DiscriminatorWithOptimizer,
+                                              MultiClassDiscriminatorWithOptimizer,
+                                              ContextAwareDiscriminator], 
                           proposals:torch.Tensor, 
                           targets:torch.Tensor,
                           reduction:str='mean',
                           mode='classification',
-                          has_gt=None,):
+                          has_gt=None,
+                          classes:torch.Tensor=None,
+                          depth:torch.Tensor=None,):
     '''
     Args:
         proposals (Tensor): [B, 3, N, H, W] tensor of predicted nocs
@@ -54,92 +59,45 @@ def discriminator_as_loss(discriminator:DiscriminatorWithOptimizer,
             number of bins, and H, W are the height and width of the
             image.
         targets (Tensor): [B, 3, H, W] tensor of indices indicating
-            which of the binary logits is the correct nocs value.'''
-    
+            which of the binary logits is the correct nocs value.
+        classes (Tensor): [B] constains the class of the sample. Used
+            when using a different discriminator for each class.
+    '''
+
     prediction = nocs_preprocessing_for_discriminator(proposals,
                                                       mode)
-    if has_gt is not None:
-        # Train discriminator
-        targets_with_gt = targets[has_gt]
-        discriminator.update(targets_with_gt, prediction[has_gt])
-        # Get nocs loss
-        idxs = torch.randperm(len(prediction))[:len(targets_with_gt)]
-        l = discriminator(prediction[idxs])
-    else:
-        # Train discriminator
-        discriminator.update(targets, prediction)
-        # Get nocs loss
-        l = discriminator(prediction)
+    selected_targets = targets
+    update_kwargs, forward_kwargs = {}, {}
+    
+    if classes is not None:
+        # For multihead discriminator, specify head
+        update_kwargs['target_classes'] = classes
+        update_kwargs['pred_classes'] = classes
+        forward_kwargs['class_id'] = classes 
+
+    # For contextual discriminator
+    if depth is not None:
+        raise NotImplementedError('contextual discriminator is \
+                                  not yet implemented.')
+        # ctxt = function of depth
+        update_kwargs['context'] = ctxt
+        forward_kwargs['context'] = ctxt 
         
-    return binary_cross_entropy(l, torch.ones_like(l), reduction=reduction)
-
-    
-def multiclass_discriminator_as_loss(discriminator:MultiClassDiscriminatorWithOptimizer, 
-                                     proposals:torch.Tensor, 
-                                     targets:torch.Tensor,
-                                     classes:torch.Tensor,
-                                     reduction:str='mean',
-                                     mode='classification',
-                                     has_gt=None,):
-    '''
-    Args:
-        proposals (Tensor): [B, 3, N, H, W] tensor of predicted nocs
-            where B is batch size, 3 is for x,y,z channels, N is the
-            number of bins, and H, W are the height and width of the
-            image.
-        targets (Tensor): [B, 3, H, W] tensor of indices indicating
-            which of the binary logits is the correct nocs value.
-        classes (Tensor): [B] is a list of the class ids associated 
-            with the B targets.'''
-    
-    prediction = nocs_preprocessing_for_discriminator(proposals,
-                                                      mode)
     if has_gt is not None:
-        # Train discriminator
-        targets_with_gt = targets[has_gt]
-        discriminator.update(targets_with_gt, prediction[has_gt], classes[has_gt])
-        # Get nocs loss
-        idxs = torch.randperm(len(prediction))[:len(targets_with_gt)]
-        l = discriminator(prediction[idxs], classes[idxs])
-    else:
-        # Train discriminator
-        discriminator.update(targets, prediction, classes)
-        # Get nocs loss
-        l = discriminator(prediction, classes)
+        # Only use samples with gt to train discriminator.
+        selected_targets = targets[has_gt]
+        if classes is not None:
+            update_kwargs['target_classes'] = classes[has_gt]
     
-    return binary_cross_entropy(l, torch.ones_like(l), reduction=reduction)
-
-    
-def contextualized_discriminator_as_loss(discriminator:DiscriminatorWithOptimizer, 
-                          proposals:torch.Tensor, 
-                          targets:torch.Tensor,
-                          classes:torch.Tensor,
-                          depth:torch.Tensor,
-                          reduction:str='mean',
-                          mode='classification',):
-    raise NotImplementedError('Contextualized discriminator is not implemented yet.')
-    '''
-    Args:
-        proposals (Tensor): [B, 3, N, H, W] tensor of predicted nocs
-            where B is batch size, 3 is for x,y,z channels, N is the
-            number of bins, and H, W are the height and width of the
-            image.
-        targets (Tensor): [B, 3, H, W] tensor of indices indicating
-            which of the binary logits is the correct nocs value.
-        classes (Tensor): [B] is a list of the class ids associated 
-            with the B targets.'''
-    
-    prediction = nocs_preprocessing_for_discriminator(proposals,
-                                                      mode)
-
-    context = None # TODO: encode classes, depth
-
     # Train discriminator
-    discriminator.update(targets, prediction, context)
-    
+    discriminator.update(targets=selected_targets, 
+                         predictions=prediction, 
+                         **update_kwargs)
     # Get nocs loss
-    l = discriminator(prediction, context)
-    return binary_cross_entropy(l, torch.ones_like(l), reduction=reduction)
+    l = discriminator(x=prediction, 
+                      **forward_kwargs)
+    return binary_cross_entropy(l, torch.ones_like(l), 
+                                reduction=reduction)
 
 
 def get_list_samples_with_gt_nocs(x, nocs_gt_available):
@@ -247,35 +205,29 @@ def nocs_loss(gt_labels,
                              targets_discretized,
                              reduction=reduction)
     
-    # TODO: make base class for all discriminator losses to inherit.
-    elif isinstance(loss_fx, DiscriminatorWithOptimizer):
+    elif isinstance(loss_fx, torch.nn.MSELoss):
+        assert proposals.shape[2] == 1, 'Expecting only single bin per color.'
+        loss = loss_fx(proposals.squeeze(2), targets)
+
+    elif isinstance(loss_fx, (DiscriminatorWithOptimizer, 
+                              MultiClassDiscriminatorWithOptimizer,
+                              ContextAwareDiscriminator)):
+        disc_kwargs = {
+            'has_gt':   detections_with_gt_nocs,
+            'classes':  torch.cat(labels) \
+                        if isinstance(loss_fx, MultiClassDiscriminatorWithOptimizer) \
+                        else None,
+            'depth':    depth 
+                        if isinstance(loss_fx, ContextAwareDiscriminator) \
+                        else None
+        }
         loss = discriminator_as_loss(loss_fx, 
                                      proposals, 
                                      targets,
                                      reduction=reduction,
                                      mode=nocs_loss_mode,
-                                     has_gt=detections_with_gt_nocs
+                                     **disc_kwargs
                                     )
-    elif isinstance(loss_fx, MultiClassDiscriminatorWithOptimizer):
-        loss = multiclass_discriminator_as_loss(loss_fx, 
-                                                proposals, 
-                                                targets, 
-                                                torch.cat(labels),
-                                                reduction=reduction,
-                                                mode=nocs_loss_mode,
-                                                has_gt=detections_with_gt_nocs
-                                                )
-    elif isinstance(loss_fx, ContextAwareDiscriminator):
-        depth_crop = [project_on_boxes(m, p, i, W) 
-            for m, p, i in zip(depth, box_proposals, matched_ids)]
-        loss = contextualized_discriminator_as_loss(loss_fx, 
-                                                proposals, 
-                                                targets, 
-                                                torch.cat(labels),
-                                                reduction=reduction,
-                                                mode=nocs_loss_mode,
-                                                depth=depth_crop)
-
     if dispersion_loss is not None:
         # Motivates the distribution of the proposal to be similar to that of target
         loss += dispersion_loss(proposals, targets) * dispersion_weight

@@ -19,21 +19,26 @@ nocs_loss:
     lr: 0.0001
     betas: [0.5, 0.999]
 
-  in_ch: 3  # For single head NOCS
 
-# NOCS head config
 
-# experiment 1
+#### NOCS head config ##########
+
+# Experiment 1 ########
 nocs_num_bins: 1
 nocs_loss_mode: regression
 multiheaded_nocs: True
 
-# # experiment 1
+# Experiment 2 ########
 # nocs_num_bins: 1
 # nocs_loss_mode: regression
 # multiheaded_nocs: False
 # keys: ['xyz']
 # layers: [512, 512, 512, 256, 256, 256]
+# nocs_loss:
+#   in_ch: 3
+
+################################
+
 
 # rpn_nms_thresh: 0.3   # default -> 0.7
 # rpn_score_thresh: 0.5 # default -> 0.0

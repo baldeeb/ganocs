@@ -63,9 +63,9 @@ training:
   data_info: 
     Real:
       dataset_dir: ${data.real_dir}
-      weight: 3 
+      weight: 1 
       intrinsics: [[591.0125, 0, 322.525], [0, 590.16775, 244.11084], [0, 0, 1]]
-      ignore_nocs: True
+      ignore_nocs: False
     CAMERA:
       dataset_dir: ${data.camera_dir}
       weight: 1
