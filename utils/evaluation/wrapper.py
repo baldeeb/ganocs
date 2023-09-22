@@ -210,7 +210,6 @@ def eval(model, dataloader, device, log_mAP_vals,synset_names,num_batches=None, 
                 iou_dict['thres_list'] = iou_thres_list
                 for cls_id in range(1, num_classes):
                     class_name = synset_names[cls_id]
-                    print(class_name)
                     for s, iou_thres in enumerate(iou_thres_list):
                         iou_3d_aps[cls_id, s] = compute_ap_from_matches_scores(iou_pred_matches_all[cls_id][s, :],
                                                                             iou_pred_scores_all[cls_id][s, :],
@@ -239,12 +238,21 @@ def eval(model, dataloader, device, log_mAP_vals,synset_names,num_batches=None, 
                 print('3D IoU at 25: {:.1f}'.format(iou_aps[-1, iou_thres_list.index(0.25)] * 100))
                 print('3D IoU at 50: {:.1f}'.format(iou_aps[-1, iou_thres_list.index(0.5)] * 100))
                 print('5 degree, 5cm: {:.1f}'.format(pose_aps[-1, degree_thres_list.index(5),shift_thres_list.index(5)] * 100))
-                print('5 degree, 100cm: {:.1f}'.format(pose_aps[-1, degree_thres_list.index(5),shift_thres_list.index(100)] * 100))
+                print('5 degree, 10cm: {:.1f}'.format(pose_aps[-1, degree_thres_list.index(5),shift_thres_list.index(100)] * 100))
                 print('10 degree, 5cm: {:.1f}'.format(pose_aps[-1, degree_thres_list.index(10),shift_thres_list.index(5)] * 100))
                 print('10 degree, 10cm: {:.1f}'.format(pose_aps[-1, degree_thres_list.index(10),shift_thres_list.index(10)] * 100))
                 print('15 degree, 5cm: {:.1f}'.format(pose_aps[-1, degree_thres_list.index(15),shift_thres_list.index(5)] * 100))
                 print('15 degree, 10cm: {:.1f}'.format(pose_aps[-1, degree_thres_list.index(15),shift_thres_list.index(10)] * 100))
+                log_results["3D IoU at 25"]=iou_aps[-1, iou_thres_list.index(0.25)] * 100
+                log_results["3D IoU at 50"]=iou_aps[-1, iou_thres_list.index(0.5)] * 100
+                log_results["5 degree, 5cm"]=pose_aps[-1, degree_thres_list.index(5),shift_thres_list.index(5)] * 100
+                log_results["5 degree, 10cm"]=pose_aps[-1, degree_thres_list.index(5),shift_thres_list.index(10)]*100
+                log_results["10 degree, 5cm"]=pose_aps[-1, degree_thres_list.index(10),shift_thres_list.index(5)] * 100
+                log_results["10 degree, 10cm"]=pose_aps[-1, degree_thres_list.index(10),shift_thres_list.index(10)] * 100
+                log_results["15 degree, 5cm"]=pose_aps[-1, degree_thres_list.index(15),shift_thres_list.index(5)] * 100
+                log_results["15 degree, 10cm"]=pose_aps[-1, degree_thres_list.index(15),shift_thres_list.index(10)] * 100
                 
+                log(log_results)
 
 
 

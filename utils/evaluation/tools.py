@@ -836,7 +836,6 @@ def compute_mAP(result,target,device,synset_names,iou_thres_list,iou_pred_matche
     gt_class_ids = np.array(target['labels']).astype(np.int)
     gt_RTs = np.squeeze(np.array(target['gt_Rt']), axis=1)
     gt_scales = np.array(target['scales'])
-    print("handle_visibility not handled")
     gt_handle_visibility = np.ones_like(gt_class_ids)
 
     if device=="cpu":

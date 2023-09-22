@@ -3,9 +3,9 @@ defaults:
   - _self_
 device: cpu
 
-log: False
+log: True
 model:
-  load: /home/kdesingh/chada022/torch_nocs/checkpoints/gan-nocs/train_new_main/2023-09-18_13-53-50/0000_000165.pth
+  load: /home/kdesingh/chada022/torch_nocs/checkpoints/gan-nocs/train_new_main/2023-09-22_00-08-13/0148_000100.pth
     
   #rpn_nms_thresh: 0.7   # default -> 0.7
   # rpn_score_thresh: 0.5 # default -> 0.0
@@ -30,6 +30,6 @@ log_mAP_vals:
 
 
 logger:
-  name: eval_map
+  name: test_umeyama
 
 num_eval_batches: 10
