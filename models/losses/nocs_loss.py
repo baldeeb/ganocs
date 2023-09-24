@@ -71,8 +71,8 @@ def discriminator_as_loss(discriminator:Union[DiscriminatorWithOptimizer,
     
     if classes is not None:
         # For multihead discriminator, specify head
-        update_kwargs['target_classes'] = classes
-        update_kwargs['pred_classes'] = classes
+        update_kwargs['real_classes'] = classes
+        update_kwargs['fake_classes'] = classes
         forward_kwargs['class_id'] = classes 
 
     # For contextual discriminator
@@ -84,14 +84,14 @@ def discriminator_as_loss(discriminator:Union[DiscriminatorWithOptimizer,
         forward_kwargs['context'] = ctxt 
         
     if has_gt is not None:
-        # Only use samples with gt to train discriminator.
+        # select targets with gt nocs to train discriminator.
         selected_targets = targets[has_gt]
         if classes is not None:
-            update_kwargs['target_classes'] = classes[has_gt]
+            update_kwargs['real_classes'] = classes[has_gt]
     
     # Train discriminator
-    discriminator.update(targets=selected_targets, 
-                         predictions=prediction, 
+    discriminator.update(real=selected_targets, 
+                         fake=prediction, 
                          **update_kwargs)
     # Get nocs loss
     l = discriminator(x=prediction, 

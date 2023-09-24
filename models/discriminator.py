@@ -75,7 +75,7 @@ class DiscriminatorWithOptimizer(Discriminator):
         loss = binary_cross_entropy(x, target)
         loss.backward()
         self.optim.step()
-        return loss.item(), x.clone().detach()
+        return loss.detach(), x.clone().detach()
 
     def _log(self, real_loss, fake_loss, real_values, fake_values):
         real_acc = Discriminator._accuracy(real_values, real=True)
@@ -132,20 +132,20 @@ class MultiClassDiscriminatorWithOptimizer(nn.Module):
             disc = self.discriminators[str(idx.item())]
             loss, val = disc._step(z[None], is_real)
             
-            losses.append(loss); values.append(val)
+            losses.append(loss.item()); values.append(val)
         return torch.tensor(losses), torch.tensor(values)
 
     def _log(self, real_loss, fake_loss, real_values, fake_values):
         return DiscriminatorWithOptimizer._log(self, real_loss, fake_loss, 
                                                real_values, fake_values)            
 
-    def update(self, targets, target_classes, predictions, pred_classes):
-        real_losses, real_vals = self._multihead_step(targets, 
+    def update(self, real, real_classes, fake, fake_classes):
+        real_losses, real_vals = self._multihead_step(real, 
                                                       True, 
-                                                      target_classes)
-        fake_losses, fake_vals = self._multihead_step(predictions, 
+                                                      real_classes)
+        fake_losses, fake_vals = self._multihead_step(fake, 
                                                       False, 
-                                                      pred_classes)
+                                                      fake_classes)
         
         self._log(real_losses, fake_losses, real_vals, fake_vals)
 

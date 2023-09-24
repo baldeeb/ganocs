@@ -1,11 +1,10 @@
+# base continuous
 defaults:
-  - base
+  - base-continuous
   - _self_
-device: cpu
 
+device: cpu
 log: True
-model:
-  load: checkpoints/gan-nocs/base-nocs-no-real-labeles/2023-09-18_11-03-48/0199_000165.pth
 
 mAP_configs:
   degree_thresholds_start: 0
@@ -24,7 +23,39 @@ mAP_configs:
   print_result: true
 
 
+# # Base Model
+model:
+  load: 
+    ignore_keys: []
+    path: checkpoints/gan-nocs/base-nocs-no-real-labeles/2023-09-18_11-03-48/0199_000165.pth
 logger:
-  name: eval-base-
-
+  name: eval-original-no-real-labeles
 num_eval_batches: 50
+
+
+
+# # GAN  Model - no real
+# defaults:
+# - gan
+# - _self_
+# model:
+#   load: 
+#     ignore_keys: []
+#     path: checkpoints/gan-nocs/gan-no-real-labels/2023-09-21_17-22-36/0095_000100.pth
+# logger:
+#   name: eval-gan-no-real
+# num_eval_batches: 50
+
+
+
+# # GAN Model
+# defaults:
+# - gan
+# - _self_
+# model:
+#   load: 
+#     ignore_keys: []
+#     path: checkpoints/gan-nocs/gan-unbalanced/2023-09-21_11-02-48/0147_000000.pth
+# logger:
+#   name: eval-gan-
+# num_eval_batches: 50
