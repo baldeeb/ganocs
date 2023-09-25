@@ -1,10 +1,10 @@
 import numpy as np
 from utils.evaluation.tools import compute_mAP,compute_ap_from_matches_scores
 
-class MAPConfig:
-    def __init__(self, synset_names, config_dict):
-        self.synset_names = synset_names
-        self.num_classes = len(synset_names)
+class MeanAveragePrecisionCalculator:
+    def __init__(self, config_dict):
+        self.synset_names = config_dict.synset_names
+        self.num_classes = len(self.synset_names)
         self.degree_thresholds = range(
             config_dict.get('degree_thresholds_start'), 
             config_dict.get('degree_thresholds_end'), 
