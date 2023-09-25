@@ -1,17 +1,36 @@
 defaults:
   - base
   - _self_
+device: cpu
 
+log: True
 model:
-  load: /home/baldeeb/Code/pytorch-NOCS/checkpoints/gan-nocs/nocs-new-roi/2023-09-16_11-44-34/0009_000000.pth
+  load: checkpoints/gan-nocs/base-no-real/2023-09-22_17-49-23/0199_000165.pth
     
-  # rpn_nms_thresh: 0.3   # default -> 0.7
+  #rpn_nms_thresh: 0.7   # default -> 0.7
   # rpn_score_thresh: 0.5 # default -> 0.0
 
   box_score_thresh: 0.7
   # box_nms_thresh:   0.3
 
+mAP_configs:
+  degree_thresholds_start: 0
+  degree_thresholds_end: 61
+  degree_thresholds_step: 1
+  shift_thresholds_start: 0
+  shift_thresholds_end: 1
+  shift_thresholds_steps: 31
+  shift_thresholds_multiplier: 15
+  iou_3d_thresholds_start: 0
+  iou_3d_thresholds_end: 1
+  iou_3d_thresholds_steps: 101
+  iou_pose_thres: 0.1
+  use_matches_for_pose: true
+  synset_names: ${data.synset_names}
+  print_result: true
+
+
 logger:
-  name: eval_base 
+  name: test_umeyama
 
 num_eval_batches: 10

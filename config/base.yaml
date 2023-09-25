@@ -8,7 +8,7 @@ log: true                 # Whether to push logs to wandb
 logger:
   project: gan-nocs
   entity:  rpm-collab
-  name:    base
+  name:    train_new_main
 
 device: cuda:0
 checkpoint_dir: ./checkpoints/${logger.project}/${logger.name}/${now:%Y-%m-%d_%H-%M-%S}
@@ -21,7 +21,10 @@ num_eval_batches: 5       # Batches to evaluate on
 
 model:
   num_classes: 7
+  box_score_thresh: 0.7
   
 hydra:
     run:
         dir: ${checkpoint_dir}
+
+mAP_configs:

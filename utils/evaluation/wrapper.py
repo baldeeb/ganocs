@@ -1,15 +1,15 @@
 import torch
-import numpy as np  
 import wandb
-from utils.evaluation.nocs_image_loss import l2_nocs_image_loss
-from utils.evaluation.tools import iou
-from utils.visualization import draw_3d_boxes
-from torchvision.utils import draw_segmentation_masks, draw_bounding_boxes
-
+import numpy as np  
 from tqdm import tqdm
 
 from utils.align import align 
-# from utils.alignment import align  # TODO: use this instead
+from utils.evaluation.tools import iou
+from utils.visualization import draw_3d_boxes
+from utils.evaluation.nocs_image_loss import l2_nocs_image_loss
+from utils.evaluation.mean_ap_calculator import MeanAveragePrecisionCalculator
+
+from torchvision.utils import draw_segmentation_masks, draw_bounding_boxes
 
 
 def merge_masks(masks, overlap_threshold=0.5):
@@ -61,11 +61,17 @@ def draw_boxes(image, Rts, Ss, intrinsic):
     assert img is not None, 'Something went wront!'
     return img
 
-def eval(model, dataloader, device, num_batches=None, log:callable=wandb.log):
+def eval(model, dataloader, device, mAP_configs=None, num_batches=None, log:callable=wandb.log):
     with torch.no_grad():
         model_training = model.training
         model.eval()
-        if num_batches is None: num_batches = len(dataloader)
+        
+        if num_batches is None: 
+            num_batches = len(dataloader)
+        
+        if mAP_configs:
+            map_calculator = MeanAveragePrecisionCalculator(mAP_configs)
+        
         for batch_i, (images, targets) in tqdm(enumerate(dataloader), 
                                                total=num_batches,
                                                leave=False, desc='Eval Loop'):
@@ -111,6 +117,8 @@ def eval(model, dataloader, device, num_batches=None, log:callable=wandb.log):
                                         _to_ndarray(target['depth']), 
                                         _to_ndarray(target['intrinsics']))
                         pred_Rt.append(Rt), pred_s.append(s)
+                    result["pred_Rt"]=pred_Rt
+                    result["scales"]=pred_s
 
                     gt_Rt, gt_s = [], []
                     for mask in _to_ndarray(target['masks']):
@@ -120,6 +128,7 @@ def eval(model, dataloader, device, num_batches=None, log:callable=wandb.log):
                                          _to_ndarray(target['depth']), 
                                          _to_ndarray(target['intrinsics']))
                         gt_Rt.append(Rt), gt_s.append(s)
+                    target["gt_Rt"]=gt_Rt
                   
                     # 3d boxes
                     # TODO this process, like IOU calculations need to get 3D boxes. Avoid redundant calculations.
@@ -160,26 +169,18 @@ def eval(model, dataloader, device, num_batches=None, log:callable=wandb.log):
                         log_results['IoU'] = np.mean(iou_vals)
 
                 log(log_results)
+                if mAP_configs:
+                    map_calculator.computing_mAP(result,target,device)
+
             if num_batches is not None and batch_i >= num_batches: break
+            
+            # if mAP_configs:
+            #     log_results.extend(map_calculator.get_mAP_dict())               
+            #     log(log_results)
+
+        if mAP_configs:               
+            log(map_calculator.get_mAP_dict(summary=True))
+
+
         if model_training: model.train()
     
-
-
-
-# def align_targets(masks:torch.Tensor, coords:torch.Tensor, depth:torch.Tensor, intrinsics:torch.Tensor):
-#     ''' Alings a bounding box to all detections in an image.
-#     The first index of each of coords, masks, and depth is expected to indicate the 
-#     number of instances that is being processed.
-#     Args: 
-#         masks  [B, H, W] is a set of masks one per object in view. 
-#         coords [3, H, W] is an image of NOCS coordinates.
-#         depth  [   H, W] depth associated with the NOCS image.
-#         intrinsic [3, 3] is the camera intrinsic matrix.
-#         '''
-#     if masks.shape[0] > 0: raise RuntimeError('Attempting to align zero detections...')
-#     transforms    = np.zeros((num_instances, 4, 4))
-#     scales        = np.ones((num_instances, 3))
-#     for i, mask in enumerate(masks):
-#         Rt, corr_loss, dist_PQ = align(mask, coords, depth, intrinsics)
-#     return transforms, scales
-
