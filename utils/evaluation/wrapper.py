@@ -174,9 +174,13 @@ def eval(model, dataloader, device, mAP_configs=None, num_batches=None, log:call
 
             if num_batches is not None and batch_i >= num_batches: break
             
-            if mAP_configs:
-                map_calculator.display_mAP(log_results)               
-                log(log_results)
+            # if mAP_configs:
+            #     log_results.extend(map_calculator.get_mAP_dict())               
+            #     log(log_results)
+
+        if mAP_configs:               
+            log(map_calculator.get_mAP_dict(summary=True))
+
 
         if model_training: model.train()
     

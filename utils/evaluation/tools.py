@@ -449,11 +449,8 @@ def compute_mAP(result,target,device,synset_names,iou_thres_list,iou_pred_matche
         pred_scores = np.array(result['scores'].cpu())
         pred_RTs = np.squeeze(np.array(result['pred_Rt']), axis=1)
 
-
-
     if len(gt_class_ids) == 0 and len(pred_class_ids) == 0:
         return
-
 
     for cls_id in range(1, num_classes):
         # get gt and predictions in this class
@@ -467,33 +464,6 @@ def compute_mAP(result,target,device,synset_names,iou_thres_list,iou_pred_matche
         cls_pred_scores = pred_scores[pred_class_ids==cls_id] if len(pred_class_ids) else np.zeros(0)
         cls_pred_RTs = pred_RTs[pred_class_ids==cls_id] if len(pred_class_ids) else np.zeros((0, 4, 4))
         cls_pred_scales = pred_scales[pred_class_ids==cls_id] if len(pred_class_ids) else np.zeros((0, 3))
-
-
-        # if len(cls_gt_class_ids) == 0 and len(cls_pred_class_ids) == 0:
-        #     continue
-
-        # elif len(cls_gt_class_ids) > 0 and len(cls_pred_class_ids) == 0:
-        #     iou_gt_matches_all[cls_id] = np.concatenate((iou_gt_matches_all[cls_id], -1*np.ones((num_iou_thres, len(cls_gt_class_ids)))), axis=-1)
-        #     if not use_matches_for_pose:
-        #         pose_gt_matches_all[cls_id] = np.concatenate((pose_gt_matches_all[cls_id], -1*np.ones((num_degree_thres, num_shift_thres, len(cls_gt_class_ids)))), axis=-1)
-        #     continue
-
-        # elif len(cls_pred_class_ids)>0 and len(cls_gt_class_ids)==0:
-        #     assert iou_pred_matches_all[cls_id].shape[1] == iou_pred_scores_all[cls_id].shape[1]
-
-        #     iou_pred_matches_all[cls_id] = np.concatenate((iou_pred_matches_all[cls_id], -1*np.ones((num_iou_thres, len(cls_pred_class_ids)))),  axis=-1)
-        #     cls_pred_scores_tile = np.tile(cls_pred_scores, (num_iou_thres, 1))
-        #     iou_pred_scores_all[cls_id] = np.concatenate((iou_pred_scores_all[cls_id], cls_pred_scores_tile), axis=-1)
-
-        #     assert iou_pred_matches_all[cls_id].shape[1] == iou_pred_scores_all[cls_id].shape[1]
-
-        #     if not use_matches_for_pose:
-        #         pose_pred_matches_all[cls_id] = np.concatenate((pose_pred_matches_all[cls_id], -1*np.ones((num_degree_thres, num_shift_thres, len(cls_pred_class_ids)))), axis=-1)
-        #         cls_pred_scores_tile = np.tile(cls_pred_scores, (num_degree_thres, num_shift_thres, 1))
-        #         pose_pred_scores_all[cls_id] = np.concatenate((pose_pred_scores_all[cls_id], cls_pred_scores_tile), axis=-1)
-        #     continue
-
-
 
         # calculate the overlap between each gt instance and pred instance
         if synset_names[cls_id] != 'mug':
@@ -535,12 +505,9 @@ def compute_mAP(result,target,device,synset_names,iou_thres_list,iou_pred_matche
             cls_gt_RTs = cls_gt_RTs[iou_thres_gt_match > -1] if len(iou_thres_gt_match) > 0 else np.zeros((0, 4, 4))
             cls_gt_handle_visibility = cls_gt_handle_visibility[iou_thres_gt_match > -1] if len(iou_thres_gt_match) > 0 else np.zeros(0)
 
-
-
         RT_overlaps = compute_RT_overlaps(cls_gt_class_ids, cls_gt_RTs, cls_gt_handle_visibility, 
                                             cls_pred_class_ids, cls_pred_RTs,
                                             synset_names)
-
 
         pose_cls_gt_match, pose_cls_pred_match = compute_match_from_degree_cm(RT_overlaps, 
                                                                                 cls_pred_class_ids, 
@@ -548,7 +515,6 @@ def compute_mAP(result,target,device,synset_names,iou_thres_list,iou_pred_matche
                                                                                 degree_thres_list, 
                                                                                 shift_thres_list)
         
-
         pose_pred_matches_all[cls_id] = np.concatenate((pose_pred_matches_all[cls_id], pose_cls_pred_match), axis=-1)
         
         cls_pred_scores_tile = np.tile(cls_pred_scores, (num_degree_thres, num_shift_thres, 1))
