@@ -203,7 +203,7 @@ class RoIHeadsWithNocs(RoIHeads):
                                                gt_masks, gt_labels, pos_matched_idxs)
                 loss_mask = {"loss_mask": rcnn_loss_mask}
 
-                # Add NOCS to Loss
+                # Add NOCS to Loss ##########################################################################################
                 if self.has_nocs():
                     device = mask_logits.device
                     gt_nocs = [t["nocs"].to(device) for t in targets]
@@ -211,35 +211,24 @@ class RoIHeadsWithNocs(RoIHeads):
                     if len(targets)> 0 and 'depth' in targets[0]:
                         depth = [t['depth'] for t in targets]
 
-                    # Selects the samples in the batch that have NOCS
-                    # TODO: Move this into the loss function.
-                    #   That should make things more efficient.
                     nocs_gt_available = [not t.get('no_nocs', False) for t in targets]
-                    if any(nocs_gt_available):
-                        sample_select = lambda v: [vi for vi, s in zip(v, nocs_gt_available) if s]
-                        # sample_select_nocs = lambda x: {k:sample_select(v) for (k, v) in x.items()}
-
-                        def sample_select_nocs(x):
-                            len_s = [len(v) for v in pos_matched_idxs]
-                            zs, os = lambda x: torch.zeros(x, dtype=torch.bool), lambda x: torch.ones(x, dtype=torch.bool)
-                            mask = torch.cat([os(l) if i else zs(l) for i, l in zip(nocs_gt_available, len_s)])
-                            # ranges = [(a, b) for a, b in zip([0]+len_s[:-1], len_s)]
-                            # m = torch.cat([p for i, p in enumerate(pos_matched_idxs) if nocs_gt_available[i]])
-                            return {k:v[mask] for (k, v) in x.items()}
+                    use_unlabeled_nocs = self._kwargs.get('use_unlabeled_nocs', False)
+                    if any(nocs_gt_available) or use_unlabeled_nocs:
 
                         reduction = 'none' if self.cache_results else 'mean'
 
-                        loss_mask["loss_nocs"] = nocs_loss(sample_select(gt_labels), 
-                                                        sample_select(gt_nocs), 
-                                                        sample_select(gt_masks),
-                                                        sample_select_nocs(nocs_proposals), 
-                                                        sample_select(proposed_box_regions),
-                                                        sample_select(pos_matched_idxs),
-                                                        reduction=reduction,
-                                                        loss_fx=self.nocs_loss,
-                                                        mode=self.nocs_loss_mode,
-                                                        depth=sample_select(depth),
-                                                        **self._kwargs)
+                        loss_mask["loss_nocs"] = nocs_loss(gt_labels, 
+                                                           gt_nocs, 
+                                                           gt_masks,
+                                                           nocs_proposals, 
+                                                           proposed_box_regions,
+                                                           pos_matched_idxs,
+                                                           reduction=reduction,
+                                                           loss_fx=self.nocs_loss,
+                                                           mode=self.nocs_loss_mode,
+                                                           depth=depth,
+                                                           samples_with_valid_targets=nocs_gt_available,
+                                                           **self._kwargs)
                         
                         if self.cache_results:
                             split_loss = separate_image_results(loss_mask['loss_nocs'], labels)
@@ -250,6 +239,12 @@ class RoIHeadsWithNocs(RoIHeads):
                                 obj_loss = split_loss[i].mean((1,2,3))
                                 result[i]['loss_nocs'] = self._properly_allocate(obj_loss)
                             loss_mask["loss_nocs"] = torch.mean(loss_mask["loss_nocs"])
+                
+                #######################################################################################################################
+
+
+
+
                 
 
             else:

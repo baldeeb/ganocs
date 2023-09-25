@@ -151,12 +151,12 @@ class MultiClassDiscriminatorWithOptimizer(nn.Module):
 
     def update(self, targets, predictions, class_id):
         losses = []
-        for i, t, p in zip(torch.cat(class_id), targets, predictions):
+        for i, t, p in zip(class_id, targets, predictions):
             losses.append(self.discriminators[str(i.item())].update(t[None], p[None]))
         return torch.mean(torch.tensor(losses))
     
     def forward(self, x, class_id):
         losses = []
-        for i, p in zip(torch.cat(class_id), x):
+        for i, p in zip(class_id, x):
             losses.append(self.discriminators[str(i.item())].forward(p[None]))
         return torch.cat(losses)

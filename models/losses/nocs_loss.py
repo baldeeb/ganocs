@@ -3,7 +3,7 @@ from torchvision.ops import boxes as _, roi_align
 from torch.nn.functional import (cross_entropy, 
                                  binary_cross_entropy, 
                                  softmax)
-from models.nocs_util import select_labels
+from models.nocs_util import select_labels_in_dict
 from models.discriminator import (DiscriminatorWithOptimizer, 
                                   MultiClassDiscriminatorWithOptimizer, 
                                   ContextAwareDiscriminator)
@@ -45,7 +45,8 @@ def discriminator_as_loss(discriminator:DiscriminatorWithOptimizer,
                           proposals:torch.Tensor, 
                           targets:torch.Tensor,
                           reduction:str='mean',
-                          mode='classification'):
+                          mode='classification',
+                          has_gt=None,):
     '''
     Args:
         proposals (Tensor): [B, 3, N, H, W] tensor of predicted nocs
@@ -58,7 +59,10 @@ def discriminator_as_loss(discriminator:DiscriminatorWithOptimizer,
     prediction = nocs_preprocessing_for_discriminator(proposals,
                                                       mode)
     # Train discriminator
-    discriminator.update(targets, prediction)
+    if has_gt is not None:
+        discriminator.update(targets[has_gt], prediction[has_gt])
+    else:
+        discriminator.update(targets, prediction)
     
     # Get nocs loss
     l = discriminator(prediction)
@@ -70,7 +74,8 @@ def multiclass_discriminator_as_loss(discriminator:DiscriminatorWithOptimizer,
                           targets:torch.Tensor,
                           classes:torch.Tensor,
                           reduction:str='mean',
-                          mode='classification'):
+                          mode='classification',
+                          has_gt=None,):
     '''
     Args:
         proposals (Tensor): [B, 3, N, H, W] tensor of predicted nocs
@@ -85,7 +90,10 @@ def multiclass_discriminator_as_loss(discriminator:DiscriminatorWithOptimizer,
     prediction = nocs_preprocessing_for_discriminator(proposals,
                                                       mode)
     # Train discriminator
-    discriminator.update(targets, prediction, classes)
+    if has_gt is not None:
+        discriminator.update(targets[has_gt], prediction[has_gt], classes[has_gt])
+    else:
+        discriminator.update(targets, prediction, classes)
     
     # Get nocs loss
     l = discriminator(prediction, classes)
@@ -99,6 +107,7 @@ def contextualized_discriminator_as_loss(discriminator:DiscriminatorWithOptimize
                           depth:torch.Tensor,
                           reduction:str='mean',
                           mode='classification',):
+    raise NotImplementedError('Contextualized discriminator is not implemented yet.')
     '''
     Args:
         proposals (Tensor): [B, 3, N, H, W] tensor of predicted nocs
@@ -123,6 +132,19 @@ def contextualized_discriminator_as_loss(discriminator:DiscriminatorWithOptimize
     return binary_cross_entropy(l, torch.ones_like(l), reduction=reduction)
 
 
+def get_list_samples_with_gt_nocs(x, nocs_gt_available):
+    return [vi for vi, s in zip(x, nocs_gt_available) if s]
+
+def get_indices_of_detections_with_gt_nocs(nocs_gt_available, matched_idxs):
+    len_s = [len(v) for v in matched_idxs]
+    zs, os = lambda a: torch.zeros(a, dtype=torch.bool), lambda a: torch.ones(a, dtype=torch.bool)
+    return torch.cat([os(l) if i else zs(l) for i, l in zip(nocs_gt_available, len_s)])
+
+def get_dict_samples_with_gt_nocs(x, nocs_gt_available, matched_idxs):
+    mask = get_indices_of_detections_with_gt_nocs(nocs_gt_available, matched_idxs)
+    return {k:v[mask] for (k, v) in x.items()}
+
+
 def nocs_loss(gt_labels, 
               gt_nocs,
               gt_masks,
@@ -135,11 +157,12 @@ def nocs_loss(gt_labels,
               dispersion_loss=None,
               dispersion_weight=0.0,
               depth=None,
+              samples_with_valid_targets=None,
               **_):
     '''
     Calculates nocs loss. Supports cross_entropy and discriminator loss.
     Args: 
-         gt_labels (List[long]): the labels existant in each image 
+        gt_labels (List[long]): the labels existant in each image 
             in the batch. The length of this list is the batch size.
         gt_nocs [B, 3, H, W] (float): ground truth nocs with
             values in [0, 1]
@@ -155,19 +178,36 @@ def nocs_loss(gt_labels,
             reductions.
         dispersion_loss (Callable): A function that takes the nocs proposals
             and returns a scalar loss per batch.
+        samples_with_valid_targets (list[bool]): A list of booleans indicating,
+            for each image in the batch, whether or not it has sufficient 
+            information to superervise nocs. When useing l2 loss this means
+            having gt nocs. If None, it will be calculated from the gt_nocs.
+
     Returns 
         loss (Tensor): An element or list of values depending on the reduction
     
     NOTE: Symmetry loss is not implemented
     '''
+    # Find samples with gt nocs
+    if samples_with_valid_targets is None:
+        samples_with_valid_targets = [g.sum().item() > 0 for g in gt_nocs]
+    
+    if loss_fx == cross_entropy:
+        # Only keep samples with valid targets
+        gt_labels = get_list_samples_with_gt_nocs(gt_labels, samples_with_valid_targets)
+        gt_nocs = get_list_samples_with_gt_nocs(gt_nocs, samples_with_valid_targets)
+        gt_masks = get_list_samples_with_gt_nocs(gt_masks, samples_with_valid_targets)
+        nocs_proposals = get_dict_samples_with_gt_nocs(nocs_proposals, samples_with_valid_targets, matched_ids)
+        proposed_box_regions = get_list_samples_with_gt_nocs(proposed_box_regions, samples_with_valid_targets)
+        matched_ids = get_list_samples_with_gt_nocs(matched_ids, samples_with_valid_targets)
+        depth = get_list_samples_with_gt_nocs(depth, samples_with_valid_targets)
+
     # Select the label for each proposal
     labels = [gt_label[idxs] for gt_label, idxs 
               in zip(gt_labels, matched_ids)]
-    proposals = select_labels(nocs_proposals, labels)  # Dict (3 values) [T, N, H, W] 
+    proposals = select_labels_in_dict(nocs_proposals, labels)  # Dict (3 values) [T, N, H, W] 
     proposals = torch.stack(tuple(proposals.values()), dim=1) # [T, 3, N, H, W] 
-    
     masked_nocs = [n[:, None] * m[None].to(n) for n, m in zip(gt_nocs, gt_masks)]
-
 
     # Reshape to fit box by performing roi_align
     W = proposals.shape[-1]  # Width of proposal we want gt to match
@@ -175,12 +215,14 @@ def nocs_loss(gt_labels,
         for m, p, i in zip(masked_nocs, proposed_box_regions, matched_ids)]
     targets = torch.cat(targets, dim=0) # [B, 3, H, W]
 
-    # If target is empty return 0
-    if targets.numel() == 0: return proposals.sum() * 0
-
     if loss_fx == cross_entropy:
+
+        # If target is empty return 0
+        if targets.numel() == 0: return proposals.sum() * 0
+        
         assert mode == 'classification', 'Cross entropy only supports classification'
         targets_idxs = (targets * (proposals.shape[2] - 1)).round().long()  # (0->1) to indices [0, 1, ...]
+
         # Temperature to limit the proposal probabilities.
         if False:
             thresh = 1e4
@@ -188,24 +230,33 @@ def nocs_loss(gt_labels,
             tau = min([thresh/abs(pmin), thresh/pmax, 1.0])
             proposals = proposals * tau # multiply by temperature
             # assert not proposals.isnan().any(), 'Proposals are NAN after temperature.'
+
         loss = cross_entropy(proposals.transpose(1,2), 
                              targets_idxs,
                              reduction=reduction)
     
-    # TODO: make base class for all to inherit.
+    # TODO: make base class for all discriminator losses to inherit.
     elif isinstance(loss_fx, DiscriminatorWithOptimizer):
         loss = discriminator_as_loss(loss_fx, 
                                      proposals, 
                                      targets,
                                      reduction=reduction,
-                                     mode=mode)
+                                     mode=mode,
+                                     has_gt=get_indices_of_detections_with_gt_nocs(
+                                                        samples_with_valid_targets,
+                                                        matched_ids),
+                                    )
     elif isinstance(loss_fx, MultiClassDiscriminatorWithOptimizer):
         loss = multiclass_discriminator_as_loss(loss_fx, 
                                                 proposals, 
                                                 targets, 
-                                                labels,
+                                                torch.cat(labels),
                                                 reduction=reduction,
-                                                mode=mode)
+                                                mode=mode,
+                                                has_gt=get_indices_of_detections_with_gt_nocs(
+                                                                    samples_with_valid_targets,
+                                                                    matched_ids),
+                                                )
     elif isinstance(loss_fx, ContextAwareDiscriminator):
         depth_crop = [project_on_boxes(m, p, i, W) 
             for m, p, i in zip(depth, proposed_box_regions, matched_ids)]
@@ -218,6 +269,7 @@ def nocs_loss(gt_labels,
                                                 depth=depth_crop)
 
     if dispersion_loss is not None:
+        # Motivates the distribution of the proposal to be similar to that of target
         loss += dispersion_loss(proposals, targets) * dispersion_weight
 
     return loss
