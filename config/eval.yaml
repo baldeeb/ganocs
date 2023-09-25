@@ -1,33 +1,11 @@
-# base continuous
-defaults:
-  - base-continuous
-  - _self_
-
-device: cpu
-log: True
-
-mAP_configs:
-  degree_thresholds_start: 0
-  degree_thresholds_end: 61
-  degree_thresholds_step: 1
-  shift_thresholds_start: 0
-  shift_thresholds_end: 1
-  shift_thresholds_steps: 31
-  shift_thresholds_multiplier: 15
-  iou_3d_thresholds_start: 0
-  iou_3d_thresholds_end: 1
-  iou_3d_thresholds_steps: 101
-  iou_pose_thres: 0.1
-  use_matches_for_pose: true
-  synset_names: ${data.synset_names}
-  print_result: true
-
-
 # # Base Model
+defaults:
+  - base
+  - _self_
 model:
   load: 
     ignore_keys: []
-    path: checkpoints/gan-nocs/base-nocs-no-real-labeles/2023-09-18_11-03-48/0199_000165.pth
+    path: checkpoints/gan-nocs/base-no-real/2023-09-22_17-49-23/0199_000165.pth
 logger:
   name: eval-original-no-real-labeles
 num_eval_batches: 50
@@ -59,3 +37,23 @@ num_eval_batches: 50
 # logger:
 #   name: eval-gan-
 # num_eval_batches: 50
+
+
+device: cpu
+log: True
+
+mAP_configs:
+  degree_thresholds_start: 0
+  degree_thresholds_end: 61
+  degree_thresholds_step: 1
+  shift_thresholds_start: 0
+  shift_thresholds_end: 1
+  shift_thresholds_steps: 31
+  shift_thresholds_multiplier: 15
+  iou_3d_thresholds_start: 0
+  iou_3d_thresholds_end: 1
+  iou_3d_thresholds_steps: 101
+  iou_pose_thres: 0.1
+  use_matches_for_pose: true
+  synset_names: ${data.synset_names}
+  print_result: true
