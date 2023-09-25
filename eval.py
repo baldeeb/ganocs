@@ -36,7 +36,7 @@ def run(cfg: DictConfig) -> None:
     logging.info(f'Loaded {cfg.model.load}')
     model.to(cfg.device).eval()
 
-    eval(model, testing_dataloader, cfg.device,cfg.log_mAP_vals,cfg.data.synset_names,
+    eval(model, testing_dataloader, cfg.device,cfg.mAP_configs,
          num_batches=cfg.num_eval_batches,log=log) 
 
 

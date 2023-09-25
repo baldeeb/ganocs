@@ -87,7 +87,7 @@ def run(cfg: DictConfig) -> None:
             log(numpify(losses))
             log({'loss': loss})
             if batch_i % cfg.batches_before_eval == 0:     # Eval
-                eval(model, val_dataloader, cfg.device,cfg.log_mAP_vals,cfg.data.synset_names, 
+                eval(model, val_dataloader, cfg.device,cfg.mAP_configs, 
                      cfg.num_eval_batches, log=log)
             
             if cfg.batches_before_save and (batch_i % cfg.batches_before_save) == 0:

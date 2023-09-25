@@ -27,5 +27,4 @@ hydra:
     run:
         dir: ${checkpoint_dir}
 
-log_mAP_vals: 
-  do_log: False
+mAP_configs:

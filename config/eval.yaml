@@ -13,8 +13,7 @@ model:
   box_score_thresh: 0.7
   # box_nms_thresh:   0.3
 
-log_mAP_vals: 
-  do_log: True
+mAP_configs:
   degree_thresholds_start: 0
   degree_thresholds_end: 61
   degree_thresholds_step: 1
@@ -27,6 +26,8 @@ log_mAP_vals:
   iou_3d_thresholds_steps: 101
   iou_pose_thres: 0.1
   use_matches_for_pose: true
+  synset_names: ${data.synset_names}
+  print_result: true
 
 
 logger:
