@@ -16,29 +16,22 @@ nocs_loss:
     path: wandb.log
   num_classes: 7 # Number of discriminators to create
   optim_args:
-    lr: 0.0001
+    lr: 0.0002
     betas: [0.5, 0.999]
+    # weight_decay: 1e-6
+
+# feat_ch: 16
 
 
+#### NOCS head config ##########################
+nocs_head_params:
+  num_bins: 1
+  mode: regression
+  multiheaded: True
+  # layers: 
+  # keys:
 
-#### NOCS head config ##########
-
-# Experiment 1 ########
-nocs_num_bins: 1
-nocs_loss_mode: regression
-multiheaded_nocs: True
-
-# Experiment 2 ########
-# nocs_num_bins: 1
-# nocs_loss_mode: regression
-# multiheaded_nocs: False
-# keys: ['xyz']
-# layers: [512, 512, 512, 256, 256, 256]
-# nocs_loss:
-#   in_ch: 3
-
-################################
-
+#### Post processing params ####################
 
 # rpn_nms_thresh: 0.3   # default -> 0.7
 # rpn_score_thresh: 0.5 # default -> 0.0

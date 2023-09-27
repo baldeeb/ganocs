@@ -6,9 +6,12 @@ maskrcnn_weights:
   path: torchvision.models.detection.mask_rcnn.MaskRCNN_ResNet50_FPN_Weights.DEFAULT
 
 # nocs head config
-nocs_num_bins: 1
-nocs_loss_mode: regression
-multiheaded_nocs: True
+nocs_head:
+  num_bins: 1
+  mode: regression
+  multiheaded: True
+  # layers:
+  # keys:
 
 # nocs loss config
 nocs_loss: 

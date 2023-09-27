@@ -17,8 +17,6 @@
 
 - [ ] NOCS symmetry loss.
 - [ ] Speed up NOCS to depth optimization using GPU.
-- [ ] Adjusting non-max-supression on inference time.
-- [ ] 3D bbox IoU eval metric.
 - [ ] Moving habitate datagen folder to datasets
 
 ## References

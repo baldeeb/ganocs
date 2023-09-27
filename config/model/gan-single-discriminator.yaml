@@ -19,9 +19,12 @@ nocs_loss:
     betas: [0.5, 0.999]
 
 #### NOCS head config ##########
-nocs_num_bins: 1
-nocs_loss_mode: regression
-multiheaded_nocs: True
+nocs_head:
+  num_bins: 1
+  mode: regression
+  multiheaded: True
+  # layers:
+  # keys:
 
 # rpn_nms_thresh: 0.3   # default -> 0.7
 # rpn_score_thresh: 0.5 # default -> 0.0

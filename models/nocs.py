@@ -183,8 +183,5 @@ def get_nocs_resnet50_fpn(
             heads = maskrcnn_resnet50_fpn(progress=progress,
                             num_classes=num_classes,
                             **kwargs).roi_heads
-            model.roi_heads = heads
-
-
-            model.roi_heads = RoIHeadsWithNocs.from_torchvision_roiheads(model.roi_heads, **kwargs)
+            model.roi_heads = RoIHeadsWithNocs.from_torchvision_roiheads(heads, **kwargs)
     return model

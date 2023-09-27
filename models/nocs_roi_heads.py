@@ -54,7 +54,6 @@ class RoIHeadsWithNocs(RoIHeads):
         nocs_heads = None,
         
         # TODO: These should be owned by the NOCS head.
-        nocs_loss_mode:str  = 'classification',  # regression, classification
         nocs_loss=torch.nn.functional.cross_entropy,  # can be cross entropy or discriminator
 
         # Others
@@ -75,12 +74,11 @@ class RoIHeadsWithNocs(RoIHeads):
 
         # TODO: remove
         self.cache_results, self._cache = cache_results, None
-        # TODO: remove pass through "**kwargs" instead
-        self.nocs_loss_mode = nocs_loss_mode
+
         self.ignore_nocs = False
         self.nocs_loss = nocs_loss
-        
         self.nocs_heads = nocs_heads
+
         self._kwargs = kwargs
         self._training_mode = None
         self._multiview_loss_mode = None
@@ -227,7 +225,7 @@ class RoIHeadsWithNocs(RoIHeads):
                                                            pos_matched_idxs,
                                                            reduction=reduction,
                                                            loss_fx=self.nocs_loss,
-                                                           nocs_loss_mode=self.nocs_loss_mode,
+                                                           nocs_loss_mode=self.nocs_heads.mode,
                                                            depth=depth,
                                                            samples_with_valid_targets=nocs_gt_available,
                                                            **self._kwargs)
@@ -377,19 +375,10 @@ class RoIHeadsWithNocs(RoIHeads):
     def from_torchvision_roiheads(heads:RoIHeads, 
                                   **kwargs):
         '''Returns RoIHeadsWithNocs given an RoIHeads instance.'''
-        nocs_kwargs = {
-            'in_channels':heads.mask_head[0][0].in_channels,
-            'num_classes':heads.mask_predictor.mask_fcn_logits.out_channels
-        }
-        keys_map = {'nocs_layers'       :'layers',
-                    'nocs_num_bins'     :'num_bins',
-                    'multiheaded_nocs'  :'multiheaded',
-                    'nocs_keys'         :'keys',
-                    'nocs_loss_mode'    :'mode',}
-        for k,v in keys_map.items():
-            if k in kwargs: nocs_kwargs[v]=kwargs[k]
-        nocs_heads = NocsHeads(**nocs_kwargs)
-
+        head_kwargs = kwargs['nocs_head_params'] if 'nocs_head_params' in kwargs else {}
+        head_kwargs['in_channels'] = heads.mask_head[0][0].in_channels
+        head_kwargs['num_classes'] = heads.mask_predictor.mask_fcn_logits.out_channels
+        nocs_heads = NocsHeads(**head_kwargs)
         return RoIHeadsWithNocs(
             heads.box_roi_pool, heads.box_head, heads.box_predictor,
             heads.proposal_matcher.high_threshold, heads.proposal_matcher.low_threshold,

@@ -14,10 +14,12 @@ nocs_loss:
   path: torch.nn.functional.cross_entropy
 
 # nocs head config
-nocs_num_bins: 32
-nocs_loss_mode: classification
-multiheaded_nocs: True
-
+nocs_head:
+  num_bins: 32
+  mode: classification
+  multiheaded: True
+  # layers:
+  # keys:
 
 # rpn_nms_thresh: 0.3   # default -> 0.7
 # rpn_score_thresh: 0.5 # default -> 0.0
