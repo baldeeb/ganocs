@@ -5,7 +5,7 @@ from tqdm import tqdm
 
 from utils.align import align 
 from utils.evaluation.tools import iou
-from utils.visualization import draw_3d_boxes
+from utils.visualization import draw_3d_boxes, GifAccumulator
 from utils.evaluation.nocs_image_loss import l2_nocs_image_loss
 from utils.evaluation.mean_ap_calculator import MeanAveragePrecisionCalculator
 
@@ -62,6 +62,11 @@ def draw_boxes(image, Rts, Ss, intrinsic):
     return img
 
 def eval(model, dataloader, device, mAP_configs=None, num_batches=None, log:callable=wandb.log):
+
+    gif = None  #  GifAccumulator('./temp/eval.gif')
+    IoU_list = []
+    l2_loss_list = []
+
     with torch.no_grad():
         model_training = model.training
         model.eval()
@@ -104,8 +109,10 @@ def eval(model, dataloader, device, mAP_configs=None, num_batches=None, log:call
                     model.roi_heads.has_nocs():
                     # l2 nocs loss
                     loss = l2_nocs_image_loss(result['nocs'], target['nocs'], 
-                                            pred_bin_masks, device=device)
-                    
+                                            pred_bin_masks, labels=result['labels'],
+                                            device=device)
+                    l2_loss_list.append(loss)
+
                     # align
                     # TODO: Move to the GPU driven align function implemented by BYOC
                     _to_ndarray = lambda a : a.clone().detach().cpu().numpy() \
@@ -167,7 +174,10 @@ def eval(model, dataloader, device, mAP_configs=None, num_batches=None, log:call
                                 iou(gt_Rt[gt_i][0], pred_Rt[pred_i][0], 
                                     gt_s[gt_i][0],  pred_s[pred_i][0]))
                         log_results['IoU'] = np.mean(iou_vals)
+                        IoU_list.extend(iou_vals)
 
+                    if gif is not None: gif.add_frame(cumm_nocs)
+                    
                 log(log_results)
                 if mAP_configs:
                     map_calculator.computing_mAP(result,target,device)
@@ -179,8 +189,10 @@ def eval(model, dataloader, device, mAP_configs=None, num_batches=None, log:call
             #     log(log_results)
 
         if mAP_configs:               
-            log(map_calculator.get_mAP_dict(summary=True))
+            log(map_calculator.get_mAP_dict())
 
 
         if model_training: model.train()
-    
+
+        log({'IoU_mean': np.mean(IoU_list), 'IoU_std': np.std(IoU_list), })
+        log({'l2_loss_mean': np.mean(l2_loss_list), 'l2_loss_std': np.std(l2_loss_list), })

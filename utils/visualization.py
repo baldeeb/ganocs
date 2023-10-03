@@ -77,3 +77,36 @@ def draw_3d_boxes(image, transform, scale, intrinsic,
 
 
 
+from PIL import Image
+import imageio
+class GifAccumulator:
+    def __init__(self, path):
+        self.path = path
+        self.frames = []
+    
+    def add_frame(self, frame):
+        if frame.ndim == 4:
+            for f in frame: 
+                self.frames.append(f)
+        else:
+            self.frames.append(frame)
+    
+    def save(self):
+        frames = [Image.fromarray(x.astype(np.uint8)) for x in self.frames]
+        imageio.mimsave(self.path, frames)
+        # self.frames = []
+        # with imageio.get_writer(self.path, mode='I') as writer:
+        #     for f in self.frames:
+        #         im = Image.fromarray(f.astype(np.uint8))
+        #         writer.append_data(im)
+    
+    def __del__(self):
+        self.save()
+
+
+import matplotlib.pyplot as plt
+def bar_and_whisker(list_data):
+    plt.figure()
+    for data in list_data:
+        plt.boxplot(data)
+    plt.imsave('./temp/IoUdist.png')

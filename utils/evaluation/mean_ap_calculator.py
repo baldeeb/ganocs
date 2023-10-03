@@ -49,7 +49,7 @@ class MeanAveragePrecisionCalculator:
                                 self.iou_gt_matches_all,self.use_matches_for_pose,self.iou_pose_thres,self.degree_thres_list, 
                                 self.shift_thres_list,self.pose_pred_matches_all,self.pose_pred_scores_all,self.pose_gt_matches_all)
                     
-    def get_mAP_dict(self, summary=False):
+    def get_mAP_dict(self):
         # iou_dict = {}
         # iou_dict['thres_list'] = self.iou_thres_list
         for cls_id in range(1, self.num_classes):
@@ -75,7 +75,7 @@ class MeanAveragePrecisionCalculator:
                 self.pose_aps[-1, i, j] = np.mean(self.pose_aps[1:-1, i, j])
         
         results = {}
-        run_idx = None if summary else -1
+        run_idx = -1
 
         results["3D IoU at 25"]    = self.get_3d_ious(0.25, run_idx=run_idx)
         results["3D IoU at 50"]    = self.get_3d_ious(0.5,  run_idx=run_idx)
@@ -97,10 +97,10 @@ class MeanAveragePrecisionCalculator:
     def get_pose_aps(self, rot, shift, run_idx=None):
         deg = self.degree_thres_list.index(rot)
         cm = self.shift_thres_list.index(shift)
-        if run_idx: return self.pose_aps[run_idx, deg, cm] * 100
+        if run_idx is not None: return self.pose_aps[run_idx, deg, cm] * 100
         else: return np.mean(self.pose_aps[:, deg, cm]) * 100
 
     def get_3d_ious(self, thresh, run_idx=None):
         t = self.iou_thres_list.index(thresh)
-        if run_idx: return self.iou_3d_aps[run_idx, t] * 100
+        if run_idx is not None: return self.iou_3d_aps[run_idx, t] * 100
         else: return np.mean(self.iou_3d_aps[:, t]) * 100
