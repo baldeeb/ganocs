@@ -1,8 +1,8 @@
 import wandb
 import hydra
 from omegaconf import DictConfig, OmegaConf
-import torch
 from utils.evaluation.wrapper import eval
+from utils.load_save import load_nocs
 import logging
 
 # TODO: discard and pass device to collate_fn
@@ -29,10 +29,7 @@ def run(cfg: DictConfig) -> None:
     # Model
     model = hydra.utils.instantiate(cfg.model)
     assert cfg.model.load.path, 'No model to load...'
-    map_loc = 'cpu' if cfg.device=="cpu" else None 
-    state_dict = torch.load(cfg.model.load.path, 
-                            map_location=map_loc)
-    model.load_state_dict(state_dict)
+    model = load_nocs(model=model, **cfg.model.load)
     logging.info(f'Loaded {cfg.model.load}')
     model.to(cfg.device).eval()
 

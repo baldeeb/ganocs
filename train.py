@@ -9,7 +9,7 @@ from omegaconf import DictConfig, OmegaConf
 
 import torch
 
-from utils.load_save import save_model, save_config
+from utils.load_save import save_model, load_nocs
 from utils.evaluation.wrapper import eval
 from utils.multiview.wrapper import MultiviewLossFunctor
 from utils.model import get_model_parameters
@@ -48,16 +48,7 @@ def run(cfg: DictConfig) -> None:
     # Model
     model = hydra.utils.instantiate(cfg.model)
     if cfg.model.load:
-        sd = torch.load(cfg.model.load.path)
-        strict = cfg.model.load.ignore_keys is None
-        missing, unexpected = model.load_state_dict(sd, strict=strict)
-        missing.extend(unexpected)
-        for k in missing:
-            for i in cfg.model.load.ignore_keys:
-                if i not in k:
-                    raise RuntimeError('While loading got\n'+
-                        f'missing & unexpected  keys: {missing}'+
-                        f'and only ignored: {cfg.model.load.ignore_keys}')
+        model = load_nocs(model=model, **cfg.model.load)
         logging.info(f'Loaded {cfg.model.load}')
     model.to(cfg.device).train()
 

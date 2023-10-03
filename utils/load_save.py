@@ -36,11 +36,25 @@ def save_model(model, path, epoch, batch, retain_n=None):
         for c in chkpts[retain_n:]: os.remove(path.parent/c)
             
         
-def load_nocs(checkpoint, **kwargs):
-    # TODO: move this to a utils function
-    path = pl.Path(checkpoint)
-    if not path.is_file() or path.suffixes[-1] != '.pth':
-        raise ValueError(f'Checkpoint {checkpoint} is not a valid path to a .pth file.')
-    m = get_nocs_resnet50_fpn(**kwargs)
-    m.load_state_dict(torch.load(checkpoint))
-    return m
+def load_nocs(**kwargs):
+    model = kwargs['model'] if 'model' in kwargs else get_nocs_resnet50_fpn(**kwargs)
+    map_loc = 'cpu' if kwargs.get('device', 'cpu')=="cpu" else None 
+    if 'checkpoint' in kwargs: # TODO: remove. backward compatibility
+        checkpoint = kwargs['checkpoint']
+        path = pl.Path(checkpoint)
+        if not path.is_file() or path.suffixes[-1] != '.pth':
+            raise ValueError(f'Checkpoint {checkpoint} is not a valid path to a .pth file.')
+        model.load_state_dict(torch.load(checkpoint, map_location=map_loc))
+    else:
+        sd = torch.load(kwargs['path'])
+        ignore_keys = kwargs.get('ignore_keys', None)
+        strict = ignore_keys is None
+        missing, unexpected = model.load_state_dict(sd, strict=strict)
+        missing.extend(unexpected)
+        for k in missing:
+            for i in ignore_keys:
+                if i not in k:
+                    raise RuntimeError('While loading got\n'+
+                        f'missing & unexpected  keys: {missing}'+
+                        f'and only ignored: {ignore_keys}')
+    return model
