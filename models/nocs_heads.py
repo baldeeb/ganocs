@@ -57,17 +57,14 @@ class NocsHeads(nn.Module):
                                last_activation=last_activation)
             for k in keys})        
 
-    def _get_head(self, in_ch, layers, out_ch, dilation, norm_layer, **kwargs):
-        m = nn.Sequential(
-            # self._original(in_ch, layers, out_ch, dilation, norm_layer)
-            self._experimental(in_ch, layers, out_ch, dilation, norm_layer)
-            )
-        if 'last_activation' in kwargs:
-            m.add_module('last_activation', kwargs['last_activation'])
+    def _get_head(self, in_ch, layers, out_ch, dilation, norm_layer, last_activation):
+        # m = self._original(in_ch, layers, out_ch, dilation, norm_layer)
+        m = self._experimental(in_ch, layers, out_ch, dilation, norm_layer)
+            
+        if last_activation is not None:
+            m.add_module('last_activation', last_activation)
         return m
     
-
-    ########################################################################
     def _original(self, in_ch, layers, out_ch, dilation, norm_layer):
         def _head_piece(in_ch, layers, dilation, norm_layer):
             blocks = []
@@ -95,8 +92,7 @@ class NocsHeads(nn.Module):
         h = _head_piece(in_ch, layers[:-1], dilation=dilation, 
                             norm_layer=norm_layer)
         p = _predictor(layers[-2], layers[-1], out_ch)
-        return nn.Sequential(h, p)
-    ########################################################################
+        return nn.Sequential(h, p) 
 
     def _experimental(self, in_ch, layers, out_ch, dilation, norm_layer):
         activation_layer = nn.LeakyReLU(0.2)
@@ -105,6 +101,10 @@ class NocsHeads(nn.Module):
                                     padding=dilation, dilation=dilation,),
                                 norm_layer(o), activation_layer
                             )
+        _down_conv = lambda i, o : nn.Sequential(
+                                        nn.Conv2d(i, o, 2, 2, 0),
+                                        norm_layer(o), activation_layer,
+                                    )
         _trans_conv = lambda i, o : nn.Sequential(
                                         nn.ConvTranspose2d(i, o, 2, 2, 0),
                                         norm_layer(o), activation_layer,
@@ -117,11 +117,16 @@ class NocsHeads(nn.Module):
                                         padding=0, dilation=dilation,)
                                 )
         blocks = [
-            _conv(in_ch, 512),
-            _conv(512, 512),
-            _trans_conv(512, 256),
-            _conv(256, 256),
-            _last_conv(256),
+            _conv(in_ch, 256),
+            _conv(256,   256),
+            _conv(256,   512),
+            _conv(512,   1028),
+            # _down_conv(512, 1028),
+            _trans_conv(1028, 512),
+            # _trans_conv(512, 256),
+            _conv(512, 256),
+            _conv(256, 128),
+            _last_conv(128),
         ]
 
         return nn.Sequential(*blocks)

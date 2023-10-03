@@ -2,32 +2,49 @@ import torch
 from torch import nn
 from torch.nn.functional import binary_cross_entropy
 from models.film import FiLMLayer
+import numpy as np
 
 
 class Discriminator(nn.Module):
     '''Discriminator model for NOCS images.
     ref: https://pytorch.org/tutorials/beginner/dcgan_faces_tutorial.html'''
-    def __init__(self, in_ch, feat_ch=128):
+    def __init__(self, in_ch, feat_ch=128, out_ch=1):
         super().__init__()
 
         # a 4x4 kernel model. closer to DCGAN.
         self.model = nn.Sequential(
-            nn.Conv2d(in_ch, feat_ch, 4, 2, 1, bias=False),
+            nn.Conv2d(in_ch, feat_ch, 3, 2, 1, bias=False),  # 28 -> 14
+            nn.BatchNorm2d(feat_ch),
             nn.LeakyReLU(0.2, inplace=True),
 
-            nn.Conv2d(feat_ch,   2*feat_ch, 4, 2, 1, bias=False),
+            nn.Conv2d(feat_ch, feat_ch, 3, 1, 1, bias=False), # 14 -> 14
+            nn.BatchNorm2d(feat_ch),
+            nn.LeakyReLU(0.2, inplace=True),
+            
+            nn.Conv2d(feat_ch, feat_ch, 3, 1, 1, bias=False), # 14 -> 14
+            nn.BatchNorm2d(feat_ch),
+            nn.LeakyReLU(0.2, inplace=True),
+
+            nn.Conv2d(feat_ch,   2*feat_ch, 3, 2, 1, bias=False), # 14 -> 7
             nn.BatchNorm2d(2*feat_ch),
             nn.LeakyReLU(0.2, inplace=True),
             
-            nn.Conv2d(2*feat_ch, 4*feat_ch, 4, 2, 1, bias=False),
+            nn.Conv2d(2*feat_ch, 4*feat_ch, 3, 2, 1, bias=False), # 7 -> 4
             nn.BatchNorm2d(4*feat_ch),
             nn.LeakyReLU(0.2, inplace=True),
             
-            # nn.Conv2d(4*feat_ch, 8*feat_ch, 4, 2, 1, bias=False),
+            nn.Conv2d(4*feat_ch, 8*feat_ch, 3, 2, 1, bias=False), # 4 -> 2
+            nn.BatchNorm2d(8*feat_ch),
+            nn.LeakyReLU(0.2, inplace=True),
+
+            nn.Flatten(1),
+            nn.Linear(8*feat_ch*4, out_ch),
+
+            # nn.Conv2d(8*feat_ch, 8*feat_ch, 2, 1, 0, bias=False), # 2 -> 1
             # nn.BatchNorm2d(8*feat_ch),
             # nn.LeakyReLU(0.2, inplace=True),
             
-            nn.Conv2d(4*feat_ch, 1, 3, 1, 0, bias=False),
+            # nn.Conv2d(8*feat_ch, out_ch, 1, 1, 0, bias=False), # 1 -> 1
             nn.Sigmoid()
         )
         self._init_weights()
@@ -57,9 +74,10 @@ class DiscriminatorWithOptimizer(Discriminator):
                  optimizer=torch.optim.Adam,
                  optim_args={'lr':1e-4, 
                              'betas':(0.5, 0.999)},
-                 logger=None
+                 logger=None,
+                 out_ch = 1,
                 ):
-        super().__init__(in_ch, feat_ch)
+        super().__init__(in_ch, feat_ch, out_ch)
         self.optim = optimizer(self.parameters(), 
                                **optim_args)
         if logger is None:
@@ -103,7 +121,55 @@ class DiscriminatorWithOptimizer(Discriminator):
         self._log(real_loss, fake_loss, r, f)
         return real_loss + fake_loss
 
-class MultiClassDiscriminatorWithOptimizer(nn.Module):
+
+class MultiClassDiscriminatorWithOptimizer(DiscriminatorWithOptimizer):
+    def __init__(self, 
+                 in_ch=3, 
+                 feat_ch=64,
+                 num_classes=10,
+                 optimizer=torch.optim.Adam,
+                 optim_args={'lr':1e-4, 
+                             'betas':(0.5, 0.999)},
+                 logger=None
+                ):
+        super().__init__(in_ch, feat_ch, 
+                         optimizer, 
+                         optim_args, 
+                         logger,
+                         out_ch=num_classes,)
+        '''Assumes class zero is discarded/background as does MRCNN.'''        
+
+
+    def _step(self, x, real:bool, classes):
+        if len(x) == 0: return torch.empty(0).to(x), torch.empty(0).to(x)
+        self.optim.zero_grad()
+        x =  self.forward(x.clone().detach(), classes).reshape(-1, 1)
+        target = torch.ones_like(x) if real else torch.zeros_like(x)
+        loss = binary_cross_entropy(x, target)
+        loss.backward()
+        self.optim.step()
+        return loss.detach(), x.clone().detach()
+
+    def _log(self, real_loss, fake_loss, real_values, fake_values):
+        return DiscriminatorWithOptimizer._log(self, real_loss, fake_loss, 
+                                               real_values, fake_values)            
+
+    def update(self, real, real_classes, fake, fake_classes):
+        real_losses, real_vals = self._step(real, True, real_classes)
+        fake_losses, fake_vals = self._step(fake, False, fake_classes)
+        self._log(real_losses, fake_losses, real_vals, fake_vals)
+        return (real_losses + fake_losses) / 2
+    
+    def forward(self, x, class_id):
+        losses = DiscriminatorWithOptimizer.forward(self, x)
+        return losses[:, class_id].flatten() if len(losses) > 0 else torch.tensor([])
+    
+
+
+
+
+
+class MultiDiscriminatorWithOptimizer(nn.Module):
     def __init__(self, 
                  in_ch=3, 
                  feat_ch=64,

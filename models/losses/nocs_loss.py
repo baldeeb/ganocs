@@ -5,6 +5,7 @@ from torch.nn.functional import (cross_entropy,
                                  softmax)
 from models.nocs_util import select_labels_in_dict
 from models.discriminator import (DiscriminatorWithOptimizer, 
+                                  MultiDiscriminatorWithOptimizer,
                                   MultiClassDiscriminatorWithOptimizer, 
                                   ContextAwareDiscriminator)
 from typing import Union
@@ -43,6 +44,7 @@ def nocs_preprocessing_for_discriminator(
     return prediction
 
 def discriminator_as_loss(discriminator:Union[DiscriminatorWithOptimizer,
+                                              MultiDiscriminatorWithOptimizer,
                                               MultiClassDiscriminatorWithOptimizer,
                                               ContextAwareDiscriminator], 
                           proposals:torch.Tensor, 
@@ -210,12 +212,14 @@ def nocs_loss(gt_labels,
         loss = loss_fx(proposals.squeeze(2), targets)
 
     elif isinstance(loss_fx, (DiscriminatorWithOptimizer, 
+                              MultiDiscriminatorWithOptimizer,
                               MultiClassDiscriminatorWithOptimizer,
                               ContextAwareDiscriminator)):
         disc_kwargs = {
             'has_gt':   detections_with_gt_nocs,
             'classes':  torch.cat(labels) \
-                        if isinstance(loss_fx, MultiClassDiscriminatorWithOptimizer) \
+                        if isinstance(loss_fx, (MultiDiscriminatorWithOptimizer,
+                                                MultiClassDiscriminatorWithOptimizer)) \
                         else None,
             'depth':    depth 
                         if isinstance(loss_fx, ContextAwareDiscriminator) \
