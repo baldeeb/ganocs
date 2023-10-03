@@ -7,7 +7,7 @@ synset_names :
   - can     #4
   - laptop  #5
   - mug     #6
-            
+
 class_map: 
   bottle: bottle
   bowl: bowl
@@ -111,7 +111,7 @@ testing:
   batch_size: ${data.batch_size}
   steps_per_epoch: ${data.steps_per_epoch}
   augment: False
-  shuffle: True
+  shuffle: False
   class_map: ${data.class_map}
 
   collate: 

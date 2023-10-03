@@ -1,6 +1,6 @@
 defaults:
   - base
-  - override model:  gan
+  - override model:  gan-multiclass
   - _self_
 
 log:    True
@@ -12,9 +12,9 @@ device:              cuda:0
 model:
   use_unlabeled_nocs: True  # When set to true, images with no nocs will train the generator
 
-  # load: 
-  #   path: checkpoints/gan-nocs/gan-no-real-labels/2023-09-21_17-22-36/0095_000100.pth
-  #   ignore_keys: 
+  load: 
+    path: checkpoints/gan-nocs/gan-new-architecture/2023-10-02_23-39-02/0199_000249.pth
+    ignore_keys: 
     
   # load: 
   #   path: checkpoints/gan-nocs/base-continuous/2023-09-21_11-00-56/0104_000000.pth

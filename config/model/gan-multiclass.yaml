@@ -10,17 +10,17 @@ load:
 
 # nocs loss config
 nocs_loss: 
-  _target_: models.discriminator.MultiDiscriminatorWithOptimizer
+  _target_: models.discriminator.MultiClassDiscriminatorWithOptimizer
   logger: 
     _target_: hydra.utils.get_method
     path: wandb.log
   num_classes: 7 # Number of discriminators to create
   optim_args:
-    lr: 0.0002
+    lr: 0.0004
     betas: [0.5, 0.999]
     # weight_decay: 1e-6
 
-# feat_ch: 16
+  feat_ch: 128
 
 
 #### NOCS head config ##########################
