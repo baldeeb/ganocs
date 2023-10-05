@@ -119,12 +119,12 @@ class NocsHeads(nn.Module):
         blocks = [
             _conv(in_ch, 256),
             _conv(256,   256),
+            _conv(256,   256),
             _conv(256,   512),
-            _conv(512,   1028),
             # _down_conv(512, 1028),
-            _trans_conv(1028, 512),
+            _trans_conv(512, 256),
             # _trans_conv(512, 256),
-            _conv(512, 256),
+            _conv(256, 256),
             _conv(256, 128),
             _last_conv(128),
         ]

@@ -17,13 +17,14 @@ class Discriminator(nn.Module):
             nn.BatchNorm2d(feat_ch),
             nn.LeakyReLU(0.2, inplace=True),
 
-            nn.Conv2d(feat_ch, feat_ch, 3, 1, 1, bias=False), # 14 -> 14
-            nn.BatchNorm2d(feat_ch),
-            nn.LeakyReLU(0.2, inplace=True),
+            # NOTE: removed this layer to reduce params when using multiple
+            # nn.Conv2d(feat_ch, feat_ch, 3, 1, 1, bias=False), # 14 -> 14
+            # nn.BatchNorm2d(feat_ch),
+            # nn.LeakyReLU(0.2, inplace=True),
             
-            nn.Conv2d(feat_ch, feat_ch, 3, 1, 1, bias=False), # 14 -> 14
-            nn.BatchNorm2d(feat_ch),
-            nn.LeakyReLU(0.2, inplace=True),
+            # nn.Conv2d(feat_ch, feat_ch, 3, 1, 1, bias=False), # 14 -> 14
+            # nn.BatchNorm2d(feat_ch),
+            # nn.LeakyReLU(0.2, inplace=True),
 
             nn.Conv2d(feat_ch,   2*feat_ch, 3, 2, 1, bias=False), # 14 -> 7
             nn.BatchNorm2d(2*feat_ch),

@@ -14,7 +14,7 @@ device: cuda:0
 checkpoint_dir: ./checkpoints/${logger.project}/${logger.name}/${now:%Y-%m-%d_%H-%M-%S}
 retain_n_checkpoints: 2   # Checkpoints to retain
 
-num_epochs: 200            # Epochs to train for
+num_epochs: 1000          # Epochs to train for
 batches_before_save: 100  # Batches before saving a checkpoint
 batches_before_eval: 50   # Batches before evaluating
 num_eval_batches: 5       # Batches to evaluate on
