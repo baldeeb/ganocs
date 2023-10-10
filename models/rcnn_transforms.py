@@ -19,12 +19,15 @@ class GeneralizedRCNNTransformWithNocs(GeneralizedRCNNTransform):
         images, targets = GeneralizedRCNNTransform.forward(self, images, targets)
         if targets is not None: 
             for i in range(len(targets)):
-                targets[i]['nocs'] = self.resize_nocs(targets[i]['nocs'])
+                targets[i]['nocs'] = self._resize(targets[i]['nocs'])
+                if 'depth' in targets[i]:
+                    H, W = targets[i]['depth'].shape[:2]
+                    targets[i]['depth'] = self._resize(targets[i]['depth'].view(1, H, W))
         return images, targets
 
-    def resize_nocs(self, nocs: Tensor):
-        nocs, _ = GeneralizedRCNNTransform.resize(self, nocs, None)
-        return nocs
+    def _resize(self, image: Tensor):
+        image, _ = GeneralizedRCNNTransform.resize(self, image, None)
+        return image
 
 
     def full_postprocess(
