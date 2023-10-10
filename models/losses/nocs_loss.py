@@ -7,7 +7,10 @@ from models.nocs_util import select_labels_in_dict
 from models.discriminator import (DiscriminatorWithOptimizer, 
                                   MultiDiscriminatorWithOptimizer,
                                   MultiClassDiscriminatorWithOptimizer, 
-                                  ContextAwareDiscriminator)
+                                  ContextAwareDiscriminator,
+
+                                  # NOTE: TEMP
+                                  RgbdMultiDiscriminatorWithOptimizer)
 from typing import Union
 
 def project_on_boxes(data, boxes, matched_idxs, M)->torch.Tensor:
@@ -66,30 +69,33 @@ def discriminator_as_loss(discriminator:Union[DiscriminatorWithOptimizer,
             when using a different discriminator for each class.
     '''
 
+    update_kwargs, forward_kwargs = {}, {}
     prediction = nocs_preprocessing_for_discriminator(proposals,
                                                       mode)
-    selected_targets = targets
-    update_kwargs, forward_kwargs = {}, {}
+    select_with_gt = lambda x : x if has_gt is None else x[has_gt]
+
+    # Select targets used to train the discriminator
+    selected_targets = select_with_gt(targets)
     
+    # Quick test: For concatenating depth to NOCS
+    if isinstance(discriminator, RgbdMultiDiscriminatorWithOptimizer):
+        assert depth is not None, 'Depth is needed for depth aware discriminators.'
+        prediction = torch.cat([prediction, depth], dim=1)
+        selected_targets = torch.cat([selected_targets, select_with_gt(depth)], dim=1)
+
     if classes is not None:
-        # For multihead discriminator, specify head
-        update_kwargs['real_classes'] = classes
+        # For multihead discriminator, set classes that will specify head
+        update_kwargs['real_classes'] = select_with_gt(classes)
         update_kwargs['fake_classes'] = classes
         forward_kwargs['class_id'] = classes 
 
     # For contextual discriminator
-    if depth is not None:
-        raise NotImplementedError('contextual discriminator is \
-                                  not yet implemented.')
+    if isinstance(discriminator, ContextAwareDiscriminator):
+        raise NotImplementedError('contextual discriminator is not yet implemented.')
+        assert depth is not None, 'Depth is needed for depth aware discriminators.'
         # ctxt = function of depth
-        update_kwargs['context'] = ctxt
+        update_kwargs['context'] = select_with_gt(ctxt)
         forward_kwargs['context'] = ctxt 
-        
-    if has_gt is not None:
-        # select targets with gt nocs to train discriminator.
-        selected_targets = targets[has_gt]
-        if classes is not None:
-            update_kwargs['real_classes'] = classes[has_gt]
     
     # Train discriminator
     discriminator.update(real=selected_targets, 
@@ -181,7 +187,8 @@ def nocs_loss(gt_labels,
     labels = [gt_label[idxs] for gt_label, idxs in zip(gt_labels, matched_ids)]
     proposals = select_labels_in_dict(nocs_proposals, labels)  # Dict (3 values) [T, N, H, W] 
     proposals = torch.stack(tuple(proposals.values()), dim=1) # [T, 3, N, H, W] 
-    masked_nocs = [n[:, None] * m[None].to(n) for n, m in zip(gt_nocs, gt_masks)]
+    device = proposals.device
+    masked_nocs = [n[:, None] * m[None].to(device) for n, m in zip(gt_nocs, gt_masks)]
 
     # Reshape to fit box by performing roi_align
     W = proposals.shape[-1]  # Width of proposal we want gt to match
@@ -221,10 +228,19 @@ def nocs_loss(gt_labels,
                         if isinstance(loss_fx, (MultiDiscriminatorWithOptimizer,
                                                 MultiClassDiscriminatorWithOptimizer)) \
                         else None,
-            'depth':    depth 
-                        if isinstance(loss_fx, ContextAwareDiscriminator) \
-                        else None
+            'depth':    None
         }
+
+        if isinstance(loss_fx, (ContextAwareDiscriminator, 
+                                RgbdMultiDiscriminatorWithOptimizer)):
+            
+            masked_depth = [(d.to(device) * m.to(device))[None] for d, m in zip(depth, gt_masks)]
+            target_depths = [project_on_boxes(m, p, i, W) for m, p, i in zip(masked_depth, box_proposals, matched_ids)]
+            disc_kwargs['depth'] = torch.cat(target_depths, dim=0) # [B, 1, H, W]
+            # mu = disc_kwargs['depth'].mean((-2, -1))
+            mu = disc_kwargs['depth'].flatten(-2, -1).median(-1).values
+            disc_kwargs['depth'] = disc_kwargs['depth'] - mu[:, None, None]
+
         loss = discriminator_as_loss(loss_fx, 
                                      proposals, 
                                      targets,

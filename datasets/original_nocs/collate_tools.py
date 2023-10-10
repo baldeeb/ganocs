@@ -7,8 +7,8 @@ def collate_fn(batch):
     targets = []
     for _, data in enumerate(batch):
 
-        depth           = data[1]
-        # depth           = torch.as_tensor(data[1]).float()
+        # depth           = data[1]
+        depth           = torch.as_tensor(data[1]).float()
 
         if data[2] is None: intrinsics = None
         else: intrinsics = torch.as_tensor(data[2]).float()

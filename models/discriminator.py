@@ -59,10 +59,11 @@ class Discriminator(nn.Module):
     
     @staticmethod
     def _accuracy(value:torch.Tensor, real:bool):
+        value = value.flatten()
         if real:
-            acc = torch.sum(value >= 0.5).item() / (value.shape[0]+1e-8)
+            acc = torch.sum(value >= 0.5).item() / (len(value) + 1e-8)
         else:
-            acc = torch.sum(value < 0.5).item() / (value.shape[0]+1e-8)
+            acc = torch.sum(value < 0.5).item() / (len(value) + 1e-8)
         return acc
 
 
@@ -224,6 +225,19 @@ class MultiDiscriminatorWithOptimizer(nn.Module):
             losses.append(self.discriminators[str(i.item())].forward(p[None]))
         return torch.cat(losses) if len(losses) > 0 else torch.tensor([])
     
+
+# NOTE: temp hacky solution. this is not the way to include depth
+class RgbdMultiDiscriminatorWithOptimizer(MultiDiscriminatorWithOptimizer):
+    def __init__(self, 
+                 in_ch=3, 
+                 feat_ch=64,
+                 num_classes=10,
+                 optimizer=torch.optim.Adam,
+                 optim_args={'lr':1e-4, 
+                             'betas':(0.5, 0.999)},
+                 logger=None
+                ):
+        super().__init__(in_ch+1, feat_ch, num_classes, optimizer, optim_args, logger)
 
 class ContextAwareDiscriminator(nn.Module):
     '''Discriminator built for FiLM layers. Accepts depth as context.'''

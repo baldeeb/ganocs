@@ -18,9 +18,9 @@ camera_dir: ./data/original_nocs_data/camera
 real_dir:   ./data/original_nocs_data/real
 coco_dir:   ./data/original_nocs_data/coco
 
-batch_size: 4
+batch_size: 3
 steps_per_epoch: 1000
-depth_scale: # 0.001  # mm to m
+depth_scale: 0.001  # mm to m
 
 common_configs:
   #################################################################################################################################
