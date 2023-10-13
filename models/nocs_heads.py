@@ -1,5 +1,5 @@
 from torchvision.ops import misc as misc_nn_ops
-from typing import Optional, Callable, Dict
+from typing import Optional, Callable, Dict, List
 from torch import nn
 import torch 
 
@@ -11,24 +11,37 @@ class NocsHeads(nn.Module):
                  num_classes=91,
                  num_bins=32,
                  keys=['x', 'y', 'z'], 
-                 multiheaded=True,
+                 head_per_channel=True,
                  norm_layer: Optional[Callable[..., nn.Module]] = nn.BatchNorm2d,
                  mode: str = 'classification',  # 'classification' or 'regression'
+                 head_per_class: bool = False,
                  ):
         super().__init__()
-        self.in_channels    = in_channels
-        self.keys           = keys
-        self.num_classes    = num_classes
-        self.num_bins       = num_bins
-        self.multiheaded    = multiheaded
-        self.mode           = mode 
+        self.in_channels        = in_channels
+        self.ch_keys            = ['x', 'y', 'z']
+        self.num_classes        = num_classes
+        self.num_bins           = num_bins
+        self.head_per_channel   = head_per_channel
+        self.head_per_class     = head_per_class
+        self.mode               = mode 
 
         if mode == 'regression':
             last_activation = nn.Tanh()
             assert self.num_bins == 1, 'Regression only supports 1 bin'
         else: last_activation = None
 
-        if multiheaded: 
+        if head_per_class and head_per_channel:
+            self.head = nn.ModuleDict(
+                {f'{i}': self._get_multi_head(['x', 'y', 'z'], 
+                                         in_channels, 
+                                         layers, 
+                                         self.num_bins,
+                                         dilation=1, 
+                                         norm_layer=norm_layer,
+                                         last_activation=last_activation,
+                                        )
+                for i in range(self.num_classes)})
+        elif head_per_channel: 
             self.head = self._get_multi_head(keys, 
                                              in_channels, 
                                              layers, 
@@ -149,7 +162,7 @@ class NocsHeads(nn.Module):
         self._init_weights(modules, init_fx)
         
 
-    def forward(self, x):
+    def forward(self, x, **kwargs):
         ''' Returns nocs features given mask features.
         Args:
             features (torch.Tensor) of shape [B, C, H, W]
@@ -162,7 +175,14 @@ class NocsHeads(nn.Module):
         '''
         results: Dict[str, torch.Tensor] = {}
         B = x.shape[0]
-        if self.multiheaded:
+        if self.head_per_class and self.head_per_channel:
+            for ch_k in self.ch_keys:
+                per_cls = []
+                for cls_head in self.head.values():
+                    kv = cls_head[ch_k](x)
+                    per_cls.append(kv.reshape(B, 1, self.num_bins, *kv.shape[-2:]))
+                results[ch_k] = torch.cat(per_cls, dim=1)
+        elif self.head_per_channel:
             for k in self.keys:
                 kv = self.head[k](x)
                 results[k] = kv.reshape(B, self.num_classes, 

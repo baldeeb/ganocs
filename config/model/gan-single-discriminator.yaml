@@ -22,7 +22,7 @@ nocs_loss:
 nocs_head:
   num_bins: 1
   mode: regression
-  multiheaded: True
+  head_per_channel: True
   # layers:
   # keys:
 

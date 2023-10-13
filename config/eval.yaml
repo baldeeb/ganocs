@@ -18,10 +18,12 @@
 defaults:
 - gan
 - _self_
+- override model: gan-depth
 model:
   load: 
     ignore_keys: [nocs_loss]
-    path: checkpoints/gan-nocs/gan-no-real-labels/2023-09-21_17-22-36/0095_000100.pth
+    # path: checkpoints/gan-nocs/gan-no-real-labels/2023-09-21_17-22-36/0095_000100.pth
+    path: checkpoints/gan-nocs-debugging/gan-depth/2023-10-10_15-56-52/0000_000100.pth
 logger:
   name: eval-gan-no-real
   project: gan-nocs-eval

@@ -8,10 +8,33 @@ maskrcnn_weights:
 # pretrained nocs weights
 load:
 
+# # nocs loss config
+# # RGBD
+# nocs_loss: 
+#   # _target_: models.discriminator.MultiDiscriminatorWithOptimizer
+#   _target_: models.discriminators.RgbdMultiDiscriminatorWithOptimizer
+#   logger: 
+#     _target_: hydra.utils.get_method
+#     path: wandb.log
+#   num_classes: 7 # Number of discriminators to create
+#   optim_args:
+#     lr: 0.0002
+#     betas: [0.5, 0.999]
+#     # weight_decay: 1e-6
+# # feat_ch: 16
+
+
 # nocs loss config
+# Depth as FiLM Context
 nocs_loss: 
-  # _target_: models.discriminator.MultiDiscriminatorWithOptimizer
-  _target_: models.discriminator.RgbdMultiDiscriminatorWithOptimizer
+  _target_: models.discriminators.MultiDiscriminatorWithOptimizer 
+  discriminators:
+    _target_: models.discriminators.get_multiple_discriminators
+    disc_type: 
+      _target_: hydra.utils.get_object
+      path: models.discriminators.DepthAwareDiscriminator
+    count: ${model.nocs_loss.num_classes}
+  
   logger: 
     _target_: hydra.utils.get_method
     path: wandb.log
@@ -20,15 +43,13 @@ nocs_loss:
     lr: 0.0002
     betas: [0.5, 0.999]
     # weight_decay: 1e-6
-
 # feat_ch: 16
-
 
 #### NOCS head config ##########################
 nocs_head_params:
   num_bins: 1
   mode: regression
-  multiheaded: True
+  head_per_channel: True
   # layers: 
   # keys:
 

@@ -4,12 +4,10 @@ from torch.nn.functional import (cross_entropy,
                                  binary_cross_entropy, 
                                  softmax)
 from models.nocs_util import select_labels_in_dict
-from models.discriminator import (DiscriminatorWithOptimizer, 
+from models.discriminators import (DiscriminatorWithOptimizer, 
                                   MultiDiscriminatorWithOptimizer,
                                   MultiClassDiscriminatorWithOptimizer, 
-                                  ContextAwareDiscriminator,
-
-                                  # NOTE: TEMP
+                                  DepthAwareDiscriminator,
                                   RgbdMultiDiscriminatorWithOptimizer)
 from typing import Union
 
@@ -49,7 +47,7 @@ def nocs_preprocessing_for_discriminator(
 def discriminator_as_loss(discriminator:Union[DiscriminatorWithOptimizer,
                                               MultiDiscriminatorWithOptimizer,
                                               MultiClassDiscriminatorWithOptimizer,
-                                              ContextAwareDiscriminator], 
+                                              DepthAwareDiscriminator], 
                           proposals:torch.Tensor, 
                           targets:torch.Tensor,
                           reduction:str='mean',
@@ -69,9 +67,8 @@ def discriminator_as_loss(discriminator:Union[DiscriminatorWithOptimizer,
             when using a different discriminator for each class.
     '''
 
-    update_kwargs, forward_kwargs = {}, {}
-    prediction = nocs_preprocessing_for_discriminator(proposals,
-                                                      mode)
+    update_real_kwargs, update_fake_kwargs, forward_kwargs = {}, {}, {}
+    prediction = nocs_preprocessing_for_discriminator(proposals, mode)
     select_with_gt = lambda x : x if has_gt is None else x[has_gt]
 
     # Select targets used to train the discriminator
@@ -85,22 +82,22 @@ def discriminator_as_loss(discriminator:Union[DiscriminatorWithOptimizer,
 
     if classes is not None:
         # For multihead discriminator, set classes that will specify head
-        update_kwargs['real_classes'] = select_with_gt(classes)
-        update_kwargs['fake_classes'] = classes
-        forward_kwargs['class_id'] = classes 
+        update_real_kwargs['classes'] = select_with_gt(classes)
+        update_fake_kwargs['classes'] = classes
+        forward_kwargs['classes']     = classes 
 
     # For contextual discriminator
-    if isinstance(discriminator, ContextAwareDiscriminator):
-        raise NotImplementedError('contextual discriminator is not yet implemented.')
-        assert depth is not None, 'Depth is needed for depth aware discriminators.'
-        # ctxt = function of depth
-        update_kwargs['context'] = select_with_gt(ctxt)
-        forward_kwargs['context'] = ctxt 
+    # if isinstance(discriminator, DepthAwareDiscriminator):
+    if 'depth_context' in discriminator.properties:
+        # assert depth is not None, 'Depth is needed for depth aware discriminators.'
+        update_real_kwargs['ctx'] = select_with_gt(depth)
+        update_fake_kwargs['ctx'] = depth
+        forward_kwargs['ctx']     = depth 
     
     # Train discriminator
-    discriminator.update(real=selected_targets, 
-                         fake=prediction, 
-                         **update_kwargs)
+    discriminator.update_real(selected_targets, **update_real_kwargs)
+    discriminator.update_fake(prediction,       **update_fake_kwargs)
+
     # Get nocs loss
     l = discriminator(x=prediction, 
                       **forward_kwargs)
@@ -221,7 +218,7 @@ def nocs_loss(gt_labels,
     elif isinstance(loss_fx, (DiscriminatorWithOptimizer, 
                               MultiDiscriminatorWithOptimizer,
                               MultiClassDiscriminatorWithOptimizer,
-                              ContextAwareDiscriminator)):
+                              DepthAwareDiscriminator)):
         disc_kwargs = {
             'has_gt':   detections_with_gt_nocs,
             'classes':  torch.cat(labels) \
@@ -231,8 +228,7 @@ def nocs_loss(gt_labels,
             'depth':    None
         }
 
-        if isinstance(loss_fx, (ContextAwareDiscriminator, 
-                                RgbdMultiDiscriminatorWithOptimizer)):
+        if 'depth_context' in loss_fx.properties:
             
             masked_depth = [(d.to(device) * m.to(device))[None] for d, m in zip(depth, gt_masks)]
             target_depths = [project_on_boxes(m, p, i, W) for m, p, i in zip(masked_depth, box_proposals, matched_ids)]

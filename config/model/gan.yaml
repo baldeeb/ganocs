@@ -10,11 +10,17 @@ load:
 
 # nocs loss config
 nocs_loss: 
-  _target_: models.discriminator.MultiDiscriminatorWithOptimizer
+  _target_: models.discriminators.MultiDiscriminatorWithOptimizer
+  discriminators:
+    _target_: models.discriminators.get_multiple_discriminators
+    disc_type: 
+      _target_: hydra.utils.get_object
+      path: models.discriminators.Discriminator
+    count: ${model.nocs_loss.num_classes}
+  num_classes: 7 # Number of discriminators to create
   logger: 
     _target_: hydra.utils.get_method
     path: wandb.log
-  num_classes: 7 # Number of discriminators to create
   optim_args:
     lr: 0.0002
     betas: [0.5, 0.999]
@@ -27,7 +33,7 @@ nocs_loss:
 nocs_head_params:
   num_bins: 1
   mode: regression
-  multiheaded: True
+  head_per_channel: True
   # layers: 
   # keys:
 

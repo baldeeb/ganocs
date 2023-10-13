@@ -15,7 +15,7 @@ class NocsDetector:
             'nocs_loss': torch.nn.functional.cross_entropy,
             'nocs_num_bins': 32,
             'nocs_loss_mode': 'classification',
-            'multiheaded_nocs': True,
+            'head_per_channel': True,
         }
 
     def __init__(self, 

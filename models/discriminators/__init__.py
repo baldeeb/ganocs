@@ -1,0 +1,6 @@
+from .vanilla import Discriminator
+from .contextual import DepthAwareDiscriminator, ContextAwareDiscriminator
+from .optimizer_wrapper import DiscriminatorWithOptimizer
+from .multi import MultiDiscriminatorWithOptimizer, MultiClassDiscriminatorWithOptimizer
+from .rgbd import RgbdMultiDiscriminatorWithOptimizer
+from .util import get_multiple_discriminators

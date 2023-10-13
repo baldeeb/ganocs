@@ -17,7 +17,7 @@ nocs_loss:
 nocs_head:
   num_bins: 32
   mode: classification
-  multiheaded: True
+  head_per_channel: True
   # layers:
   # keys:
 

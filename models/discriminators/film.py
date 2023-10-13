@@ -11,12 +11,11 @@ class FiLMLayer(nn.Module):
                  activation=nn.ReLU(inplace=True),
                  batch_norm=nn.BatchNorm2d):
         super().__init__()
-        self.layer = nn.Sequential(
-            nn.Conv2d(in_ch, out_ch, kernel_size, stride, padding, dilation),
-            batch_norm(out_ch),
-            activation
-        )
-
+        self.layer = [nn.Conv2d(in_ch, out_ch, kernel_size, stride, padding, dilation)]
+        if batch_norm is not None: self.layer.append(batch_norm(out_ch))
+        if activation is not None: self.layer.append(activation)
+        
+        self.layer = nn.Sequential(*self.layer)
         self.bias = nn.Linear(dim_ctx, out_ch, bias=False)
         self.gate = nn.Linear(dim_ctx, out_ch)
 
