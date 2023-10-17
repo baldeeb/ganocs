@@ -116,4 +116,4 @@ class MultiDiscriminatorWithOptimizer(nn.Module):
 
     @property
     def properties(self): 
-        return ['multihead'] + self.discriminators['1'].properties
+        return ['multiclass'] + self.discriminators['1'].properties

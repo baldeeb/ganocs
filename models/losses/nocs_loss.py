@@ -9,7 +9,7 @@ from models.discriminators import (DiscriminatorWithOptimizer,
                                   MultiClassDiscriminatorWithOptimizer, 
                                   DepthAwareDiscriminator,
                                   RgbdMultiDiscriminatorWithOptimizer)
-from typing import Union
+from typing import Union, Dict, Callable
 
 def project_on_boxes(data, boxes, matched_idxs, M)->torch.Tensor:
     """ Code borrowed from torchvision.models.detection.roi_heads.project_masks_on_boxes
@@ -116,6 +116,26 @@ def get_indices_of_detections_with_gt_nocs(nocs_gt_available, matched_idxs):
 def get_dict_samples_with_gt_nocs(x, detections_with_gt_nocs):
     return {k:v[detections_with_gt_nocs] for (k, v) in x.items()}
 
+def get_loss_objectives(loss_fx):
+    cross_entropy_loss, discriminator_loss, mse_loss = None, None,None
+    if isinstance(loss_fx, torch.nn.ModuleDict):
+        discriminator_loss = loss_fx['discriminator'] if 'discriminator' in loss_fx else None
+        cross_entropy_loss = loss_fx['cross_entropy'] if 'cross_entropy' in loss_fx else None
+        mse_loss = loss_fx['mse'] if 'mse' in loss_fx else None
+    elif isinstance(loss_fx, cross_entropy):
+        cross_entropy_loss = loss_fx
+    elif isinstance(loss_fx, torch.nn.MSELoss):
+        mse_loss = loss_fx
+    else: 
+        discriminator_loss = loss_fx
+    if discriminator_loss is not None:
+        assert isinstance(discriminator_loss, 
+                            (DiscriminatorWithOptimizer, 
+                            MultiDiscriminatorWithOptimizer,
+                            MultiClassDiscriminatorWithOptimizer,
+                            DepthAwareDiscriminator))
+    return cross_entropy_loss, mse_loss, discriminator_loss
+
 
 def nocs_loss(gt_labels, 
               gt_nocs,
@@ -124,9 +144,9 @@ def nocs_loss(gt_labels,
               box_proposals, 
               matched_ids, 
               reduction='mean',
-              loss_fx=cross_entropy,
+              loss_fx:Union[Dict, Callable]=cross_entropy,
               nocs_loss_mode='classification', # regression or classification
-              dispersion_loss=None,
+              dispersion_loss=None, # TODO: integrate into loss_fx
               dispersion_weight=0.0,
               depth=None,
               samples_with_valid_targets=None,
@@ -168,8 +188,11 @@ def nocs_loss(gt_labels,
     detections_with_gt_nocs = get_indices_of_detections_with_gt_nocs(
                                                         samples_with_valid_targets,
                                                         matched_ids),
+
     
-    if loss_fx == cross_entropy or not kwargs.get('use_unlabeled_nocs', False):
+    entropy_loss, mse_loss, discriminator_loss = get_loss_objectives(loss_fx)
+
+    if entropy_loss is not None or not kwargs.get('use_unlabeled_nocs', False):
         # When not using discriminator or when specifically asked not to train with unlabeled data, 
         #   only keep samples with valid targets
         gt_labels = get_list_samples_with_gt_nocs(gt_labels, samples_with_valid_targets)
@@ -193,43 +216,29 @@ def nocs_loss(gt_labels,
     targets = [project_on_boxes(m, p, i, W) 
         for m, p, i in zip(masked_nocs, box_proposals, matched_ids)]
     targets = torch.cat(targets, dim=0) # [B, 3, H, W]
-
-    if loss_fx == cross_entropy:
+    loss = torch.tensor(0.0).to(device)
+    if entropy_loss:
         # If target is empty return 0
         if targets.numel() == 0: return proposals.sum() * 0
         assert nocs_loss_mode == 'classification', 'Cross entropy only supports classification'
         targets_discretized = (targets * (proposals.shape[2] - 1)).round().long()  # (0->1) to indices [0, 1, ...]
-
-        # Temperature to limit the proposal probabilities.
         if False:
+            # Temperature to limit the proposal probabilities.
             thresh = 1e4
             pmin, pmax = proposals.min(), proposals.max() 
             tau = min([thresh/abs(pmin), thresh/pmax, 1.0])
             proposals = proposals * tau # multiply by temperature
-            # assert not proposals.isnan().any(), 'Proposals are NAN after temperature.'
-
-        loss = cross_entropy(proposals.transpose(1,2), 
-                             targets_discretized,
-                             reduction=reduction)
-    
-    elif isinstance(loss_fx, torch.nn.MSELoss):
+        loss += cross_entropy(proposals.transpose(1,2), targets_discretized, reduction=reduction)
+    if mse_loss is not None:
         assert proposals.shape[2] == 1, 'Expecting only single bin per color.'
-        loss = loss_fx(proposals.squeeze(2), targets)
-
-    elif isinstance(loss_fx, (DiscriminatorWithOptimizer, 
-                              MultiDiscriminatorWithOptimizer,
-                              MultiClassDiscriminatorWithOptimizer,
-                              DepthAwareDiscriminator)):
+        loss += mse_loss(proposals.squeeze(2), targets)
+    if discriminator_loss is not None: 
         disc_kwargs = {
             'has_gt':   detections_with_gt_nocs,
-            'classes':  torch.cat(labels) \
-                        if isinstance(loss_fx, (MultiDiscriminatorWithOptimizer,
-                                                MultiClassDiscriminatorWithOptimizer)) \
-                        else None,
-            'depth':    None
-        }
+            'classes':  torch.cat(labels) if 'multiclass' in discriminator_loss.properties else None,
+            'depth':    None }
 
-        if 'depth_context' in loss_fx.properties:
+        if 'depth_context' in discriminator_loss.properties:
             
             masked_depth = [(d.to(device) * m.to(device))[None] for d, m in zip(depth, gt_masks)]
             target_depths = [project_on_boxes(m, p, i, W) for m, p, i in zip(masked_depth, box_proposals, matched_ids)]
@@ -238,7 +247,7 @@ def nocs_loss(gt_labels,
             mu = disc_kwargs['depth'].flatten(-2, -1).median(-1).values
             disc_kwargs['depth'] = disc_kwargs['depth'] - mu[:, None, None]
 
-        loss = discriminator_as_loss(loss_fx, 
+        loss += discriminator_as_loss(discriminator_loss, 
                                      proposals, 
                                      targets,
                                      reduction=reduction,

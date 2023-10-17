@@ -1,0 +1,52 @@
+_target_: models.nocs.get_nocs_resnet50_fpn
+
+# pretrained mrcnn weights
+maskrcnn_weights: 
+  _target_: hydra.utils.get_object
+  path: torchvision.models.detection.mask_rcnn.MaskRCNN_ResNet50_FPN_Weights.DEFAULT
+
+# pretrained nocs weights
+load:
+
+# nocs loss config
+nocs_loss:
+  _target_: torch.nn.ModuleDict
+  modules:
+    'discriminator':
+      _target_: models.discriminators.MultiDiscriminatorWithOptimizer
+      discriminators:
+        _target_: models.discriminators.get_multiple_discriminators
+        disc_type: 
+          _target_: hydra.utils.get_object
+          path: models.discriminators.Discriminator
+        count: 7
+      num_classes: 7 # Number of discriminators to create
+      logger: 
+        _target_: hydra.utils.get_method
+        path: wandb.log
+      optim_args:
+        lr: 0.0002
+        betas: [0.5, 0.999]
+        # weight_decay: 1e-6
+    'mse':
+      _target_: torch.nn.MSELoss
+      reduction: mean
+
+# feat_ch: 16
+
+
+#### NOCS head config ##########################
+nocs_head_params:
+  num_bins: 1
+  mode: regression
+  head_per_channel: True
+  # head_per_class: True
+  # net_style: tiny
+  # layers: 
+
+#### Post processing params ####################
+
+# rpn_nms_thresh: 0.3   # default -> 0.7
+# rpn_score_thresh: 0.5 # default -> 0.0
+box_score_thresh: 0.7
+# box_nms_thresh:   0.3
