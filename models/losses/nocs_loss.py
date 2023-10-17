@@ -170,7 +170,8 @@ def nocs_loss(gt_labels,
                                                         matched_ids),
     
     if loss_fx == cross_entropy or not kwargs.get('use_unlabeled_nocs', False):
-        # Only keep samples with valid targets
+        # When not using discriminator or when specifically asked not to train with unlabeled data, 
+        #   only keep samples with valid targets
         gt_labels = get_list_samples_with_gt_nocs(gt_labels, samples_with_valid_targets)
         gt_nocs = get_list_samples_with_gt_nocs(gt_nocs, samples_with_valid_targets)
         gt_masks = get_list_samples_with_gt_nocs(gt_masks, samples_with_valid_targets)

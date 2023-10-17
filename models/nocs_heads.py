@@ -3,6 +3,89 @@ from typing import Optional, Callable, Dict, List
 from torch import nn
 import torch 
 
+
+
+
+def _original(in_ch, layers, out_ch, dilation, norm_layer):
+    def _head_piece(in_ch, layers, dilation, norm_layer):
+        blocks = []
+        next_feature = in_ch
+        for layer_features in layers:
+            blocks.append(
+                misc_nn_ops.Conv2dNormActivation(
+                    next_feature, layer_features,
+                    kernel_size=3,stride=1,
+                    padding=dilation,
+                    dilation=dilation,
+                    norm_layer=norm_layer,
+                )
+            )
+            next_feature = layer_features
+        return nn.Sequential(*blocks)
+    def _predictor(in_ch, feat_ch, out_ch):
+        blocks = [nn.ConvTranspose2d(in_ch, feat_ch, 2, 2, 0),
+                  nn.ReLU(inplace=True),
+                  nn.Conv2d(feat_ch, out_ch, 1, 1, 0),]
+        return nn.Sequential(*blocks)
+    
+    h = _head_piece(in_ch, layers[:-1], dilation=dilation, 
+                        norm_layer=norm_layer)
+    p = _predictor(layers[-2], layers[-1], out_ch)
+    return nn.Sequential(h, p) 
+
+def _experimental(in_ch, layers, out_ch, dilation, norm_layer):
+    activation_layer = nn.LeakyReLU(0.2)
+    _conv = lambda i, o: nn.Sequential(
+                            nn.Conv2d( i, o, kernel_size=3, stride=1,
+                                padding=dilation, dilation=dilation,),
+                            norm_layer(o), activation_layer)
+    _down_conv = lambda i, o : nn.Sequential(
+                                    nn.Conv2d(i, o, 2, 2, 0),
+                                    norm_layer(o), activation_layer,)
+    _trans_conv = lambda i, o : nn.Sequential(
+                                    nn.ConvTranspose2d(i, o, 2, 2, 0),
+                                    norm_layer(o), activation_layer,)
+    _last_conv = lambda i: nn.Sequential(
+                                nn.Conv2d( i, i, kernel_size=3, stride=1,
+                                        padding=dilation, dilation=dilation,),
+                                activation_layer,
+                                nn.Conv2d(i, out_ch, kernel_size=1, stride=1,
+                                    padding=0, dilation=dilation,))
+    blocks = [_conv(in_ch, 256),
+              _conv(256,   256),
+              _conv(256,   256),
+              _conv(256,   512),
+              # _down_conv(512, 1028),
+              _trans_conv(512, 256),
+              # _trans_conv(512, 256),
+              _conv(256, 256),
+              _conv(256, 128),
+              _last_conv(128),]
+    return nn.Sequential(*blocks)
+
+def _tiny(in_ch, layers, out_ch, dilation, norm_layer):
+    activation_layer = nn.LeakyReLU(0.2)
+    _conv = lambda i, o: nn.Sequential(
+                            nn.Conv2d( i, o, kernel_size=3, stride=1,
+                                padding=dilation, dilation=dilation,),
+                            norm_layer(o), activation_layer)
+    _trans_conv = lambda i, o : nn.Sequential(
+                                    nn.ConvTranspose2d(i, o, 2, 2, 0),
+                                    norm_layer(o), activation_layer,)
+    _last_conv = lambda i: nn.Sequential(
+                                nn.Conv2d( i, i, kernel_size=3, stride=1,
+                                        padding=dilation, dilation=dilation,),
+                                activation_layer,
+                                nn.Conv2d(i, out_ch, kernel_size=1, stride=1,
+                                    padding=0, dilation=dilation,))
+    blocks = [_conv(in_ch, 64),
+              _conv(64,   64),
+              _trans_conv(64, 64),
+              _conv(64, 64),
+              _last_conv(64),]
+    return nn.Sequential(*blocks)
+
+
 class NocsHeads(nn.Module):
     '''Derived from torchvision.models.detection.mask_rcnn.(MaskRCNNHeads, MaskRCNNPredictor)'''
     def __init__(self, 
@@ -10,11 +93,11 @@ class NocsHeads(nn.Module):
                  layers=(256, 256, 256, 256, 256), 
                  num_classes=91,
                  num_bins=32,
-                 keys=['x', 'y', 'z'], 
                  head_per_channel=True,
                  norm_layer: Optional[Callable[..., nn.Module]] = nn.BatchNorm2d,
                  mode: str = 'classification',  # 'classification' or 'regression'
                  head_per_class: bool = False,
+                 net_style:str = 'original',  # 'tiny', 'experimental', 'original'
                  ):
         super().__init__()
         self.in_channels        = in_channels
@@ -24,6 +107,7 @@ class NocsHeads(nn.Module):
         self.head_per_channel   = head_per_channel
         self.head_per_class     = head_per_class
         self.mode               = mode 
+        self.net_style          = net_style
 
         if mode == 'regression':
             last_activation = nn.Tanh()
@@ -32,7 +116,7 @@ class NocsHeads(nn.Module):
 
         if head_per_class and head_per_channel:
             self.head = nn.ModuleDict(
-                {f'{i}': self._get_multi_head(['x', 'y', 'z'], 
+                {f'{i}': self._get_multi_head(self.ch_keys, 
                                          in_channels, 
                                          layers, 
                                          self.num_bins,
@@ -42,7 +126,7 @@ class NocsHeads(nn.Module):
                                         )
                 for i in range(self.num_classes)})
         elif head_per_channel: 
-            self.head = self._get_multi_head(keys, 
+            self.head = self._get_multi_head(self.ch_keys, 
                                              in_channels, 
                                              layers, 
                                              self.num_classes * self.num_bins,
@@ -53,7 +137,7 @@ class NocsHeads(nn.Module):
         else:
             self.head = self._get_head(in_channels,
                                        layers, 
-                                       len(keys) * self.num_bins * self.num_classes,
+                                       len(self.ch_keys) * self.num_bins * self.num_classes,
                                        dilation=1,
                                        norm_layer=norm_layer,
                                        last_activation=last_activation,
@@ -71,78 +155,17 @@ class NocsHeads(nn.Module):
             for k in keys})        
 
     def _get_head(self, in_ch, layers, out_ch, dilation, norm_layer, last_activation):
-        # m = self._original(in_ch, layers, out_ch, dilation, norm_layer)
-        m = self._experimental(in_ch, layers, out_ch, dilation, norm_layer)
+        if self.net_style == 'original':
+            m = _original(in_ch, layers, out_ch, dilation, norm_layer)
+        elif self.net_style == 'experimental':
+            m = _experimental(in_ch, layers, out_ch, dilation, norm_layer)
+        elif self.net_style == 'tiny':
+            m = _tiny(in_ch, layers, out_ch, dilation, norm_layer)
             
         if last_activation is not None:
             m.add_module('last_activation', last_activation)
         return m
     
-    def _original(self, in_ch, layers, out_ch, dilation, norm_layer):
-        def _head_piece(in_ch, layers, dilation, norm_layer):
-            blocks = []
-            next_feature = in_ch
-            for layer_features in layers:
-                blocks.append(
-                    misc_nn_ops.Conv2dNormActivation(
-                        next_feature, layer_features,
-                        kernel_size=3,stride=1,
-                        padding=dilation,
-                        dilation=dilation,
-                        norm_layer=norm_layer,
-                    )
-                )
-                next_feature = layer_features
-            return nn.Sequential(*blocks)
-        def _predictor(in_ch, feat_ch, out_ch):
-            blocks = [
-                nn.ConvTranspose2d(in_ch, feat_ch, 2, 2, 0),
-                nn.ReLU(inplace=True),
-                nn.Conv2d(feat_ch, out_ch, 1, 1, 0),
-            ]
-            return nn.Sequential(*blocks)
-        
-        h = _head_piece(in_ch, layers[:-1], dilation=dilation, 
-                            norm_layer=norm_layer)
-        p = _predictor(layers[-2], layers[-1], out_ch)
-        return nn.Sequential(h, p) 
-
-    def _experimental(self, in_ch, layers, out_ch, dilation, norm_layer):
-        activation_layer = nn.LeakyReLU(0.2)
-        _conv = lambda i, o: nn.Sequential(
-                                nn.Conv2d( i, o, kernel_size=3, stride=1,
-                                    padding=dilation, dilation=dilation,),
-                                norm_layer(o), activation_layer
-                            )
-        _down_conv = lambda i, o : nn.Sequential(
-                                        nn.Conv2d(i, o, 2, 2, 0),
-                                        norm_layer(o), activation_layer,
-                                    )
-        _trans_conv = lambda i, o : nn.Sequential(
-                                        nn.ConvTranspose2d(i, o, 2, 2, 0),
-                                        norm_layer(o), activation_layer,
-                                    )
-        _last_conv = lambda i: nn.Sequential(
-                                    nn.Conv2d( i, i, kernel_size=3, stride=1,
-                                            padding=dilation, dilation=dilation,),
-                                    activation_layer,
-                                    nn.Conv2d(i, out_ch, kernel_size=1, stride=1,
-                                        padding=0, dilation=dilation,)
-                                )
-        blocks = [
-            _conv(in_ch, 256),
-            _conv(256,   256),
-            _conv(256,   256),
-            _conv(256,   512),
-            # _down_conv(512, 1028),
-            _trans_conv(512, 256),
-            # _trans_conv(512, 256),
-            _conv(256, 256),
-            _conv(256, 128),
-            _last_conv(128),
-        ]
-
-        return nn.Sequential(*blocks)
 
     def _init_weights(self, modules, fx):
          for m in modules:
@@ -162,7 +185,7 @@ class NocsHeads(nn.Module):
         self._init_weights(modules, init_fx)
         
 
-    def forward(self, x, **kwargs):
+    def forward(self, x):
         ''' Returns nocs features given mask features.
         Args:
             features (torch.Tensor) of shape [B, C, H, W]
@@ -183,7 +206,7 @@ class NocsHeads(nn.Module):
                     per_cls.append(kv.reshape(B, 1, self.num_bins, *kv.shape[-2:]))
                 results[ch_k] = torch.cat(per_cls, dim=1)
         elif self.head_per_channel:
-            for k in self.keys:
+            for k in self.ch_keys:
                 kv = self.head[k](x)
                 results[k] = kv.reshape(B, self.num_classes, 
                                         self.num_bins, *kv.shape[-2:])

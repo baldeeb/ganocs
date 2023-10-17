@@ -24,7 +24,6 @@ nocs_head:
   mode: regression
   head_per_channel: True
   # layers:
-  # keys:
 
 # rpn_nms_thresh: 0.3   # default -> 0.7
 # rpn_score_thresh: 0.5 # default -> 0.0

@@ -11,7 +11,6 @@ nocs_head:
   mode: regression
   head_per_channel: True
   # layers:
-  # keys:
 
 # nocs loss config
 nocs_loss: 

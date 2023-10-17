@@ -1,11 +1,11 @@
 defaults:
   - base
-  - override model:  gan-depth
+  - override model:  gan
   - _self_
 
 log:    True
 logger:
-  name: gan-depth
+  name: gan
 
 device:              cuda:0
 

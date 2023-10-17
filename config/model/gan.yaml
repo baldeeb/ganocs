@@ -34,8 +34,9 @@ nocs_head_params:
   num_bins: 1
   mode: regression
   head_per_channel: True
+  head_per_class: True
+  net_style: tiny
   # layers: 
-  # keys:
 
 #### Post processing params ####################
 

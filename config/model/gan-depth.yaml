@@ -51,7 +51,6 @@ nocs_head_params:
   mode: regression
   head_per_channel: True
   # layers: 
-  # keys:
 
 #### Post processing params ####################
 
