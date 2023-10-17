@@ -41,6 +41,8 @@ class NOCSDataloader():
                                         class_map)
             elif k == 'HABITAT': 
                 raise NotImplementedError('Habitat data is not yet set up.')
+            elif k == 'realsense': 
+                self._dataset.load_realsense_scenes(v.dataset_dir)
             self._dataset.prepare(class_map)
         self._source_weights = torch.tensor(self._source_weights).float()
         self._register_source_ids()
@@ -74,7 +76,8 @@ class NOCSDataloader():
 
             try:
                 data = self._get_data(source_i)
-                if self._no_visible_objects(data): continue
+                if self._sources[source_i]!=["realsense"]:
+                    if self._no_visible_objects(data): continue
                 self._step_count += 1
             except StopIteration as e:
                 # TODO: should I just remove the exhausted dataset?
@@ -106,7 +109,7 @@ class NOCSDataloader():
     def _get_image_id(self, source_i):
         source = self._sources[source_i]
         idx = self._counters[source]
-        if idx >= len(self._sources_and_idxs[source]):
+        if idx is None or idx >= len(self._sources_and_idxs[source]):
             self._counters[source] = None
             raise StopIteration(f'Data source {source} is exhausted.')
         self._counters[source] += 1
@@ -115,11 +118,17 @@ class NOCSDataloader():
     
     def _get_data(self, source_i):
         image_id = self._get_image_id(source_i)
+        
+        if self._sources[source_i]=="realsense":
+            image,depth=load_image_realsense(self._dataset, self._dataset.config, image_id, augment=self.augment)
+            return (image, depth,self._source_intrinsics[source_i],None,None,None,None,None,None) 
+        
         image, depth, image_metas, gt_boxes, gt_masks, gt_coords, gt_no_nocs, scale= \
             load_image_gt(self._dataset, self._dataset.config, image_id, augment=self.augment)
         
         if np.sum(gt_boxes) <= 0:
             # skip data without labels; no interesting categories.
+            image = image.astype(np.float32) / 255.0
             gt_class_ids = 0
         else:
             image = image.astype(np.float32) / 255.0
@@ -171,3 +180,20 @@ def load_image_gt(dataset, config, image_id, augment=False):
 
     return (image, depth, image_meta, bbox, mask, coord, no_nocs, scales)
 
+def load_image_realsense(dataset, config, image_id, augment=False):
+    # Load image and mask
+
+    image = dataset.load_image(image_id)
+    image = image.astype(np.float32) / 255.0
+
+    
+    depth = dataset.load_depth(image_id)
+    if depth is None: depth = np.zeros((image.shape[0], image.shape[1], 1))
+    image_meta=None
+    bbox=None 
+    mask=None 
+    coord=None 
+    no_nocs=None 
+    scales=None
+
+    return (image, depth)

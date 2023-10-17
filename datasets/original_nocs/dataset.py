@@ -93,6 +93,49 @@ class NOCSDataset(utils.Dataset):
         self.source_image_ids[source] = np.arange(num_images_before_load, num_images_after_load)
         if self._verbose: print('{} images are loaded into the dataset from {}.'.format(num_images_after_load - num_images_before_load, source))
 
+    def load_realsense_scenes(self, dataset_dir):
+        """Load Images captured by realsense camera
+        """
+
+        source = "realsense"
+        num_images_before_load = len(self.image_info)
+
+        folder_name = 'train' if self.subset == 'train' else 'test'
+        image_dir = os.path.join(dataset_dir, folder_name)
+        folder_list = [name for name in glob.glob(image_dir + '/*') if os.path.isdir(name)]
+        folder_list = sorted(folder_list)
+
+        image_id = 0
+        for folder in folder_list:
+            image_list = glob.glob(os.path.join(folder, '*_color.png'))
+            image_list = sorted(image_list)
+
+            for image_full_path in image_list:
+                image_name = os.path.basename(image_full_path)
+                image_ind = image_name.split('_')[0]
+                image_path = os.path.join(folder, image_ind)
+                
+                #meta_path = image_path + '_meta.txt'
+                inst_dict = {}
+
+                width = self.config.IMAGE_MAX_DIM  # meta_data['viewport_size_x'].flatten()[0]
+                height = self.config.IMAGE_MIN_DIM  # meta_data['viewport_size_y'].flatten()[0]
+
+                self.add_image(
+                    source=source,
+                    image_id=image_id,
+                    path=image_path,
+                    width=width,
+                    height=height,
+                    #inst_dict=inst_dict
+                    )
+                image_id += 1
+            
+
+        num_images_after_load = len(self.image_info)
+        self.source_image_ids[source] = np.arange(num_images_before_load, num_images_after_load)
+        if self._verbose: print('{} images are loaded into the dataset from {}.'.format(num_images_after_load - num_images_before_load, source))
+    
     def load_camera_scenes(self, dataset_dir, if_calculate_mean=False):
         """Load a subset of the CAMERA dataset.
         dataset_dir: The root directory of the CAMERA dataset.
@@ -273,7 +316,7 @@ class NOCSDataset(utils.Dataset):
         Typically this function loads the image from a file.
         """
         info = self.image_info[image_id]
-        if info["source"] in ["CAMERA", "Real", "HABITAT"]:
+        if info["source"] in ["CAMERA", "Real", "HABITAT","realsense"]:
             image_path = info["path"] + '_color.png'
             assert os.path.exists(image_path), "{} is missing".format(image_path)
 
@@ -299,7 +342,7 @@ class NOCSDataset(utils.Dataset):
         Typically this function loads the image from a file.
         """
         info = self.image_info[image_id]
-        if info["source"] in ["CAMERA", "Real", "HABITAT"]:
+        if info["source"] in ["CAMERA", "Real", "HABITAT","realsense"]:
             depth_path = info["path"] + '_depth.png'
             depth = cv2.imread(depth_path, -1)
 
@@ -522,6 +565,18 @@ class NOCSDataset(utils.Dataset):
             # use zero arrays as coord map for COCO images
             coords = np.zeros(masks.shape+(3,), dtype=np.float32)
             scales = np.ones((len(class_ids),3), dtype=np.float32)
+
+        elif info["source"]=="realsense":
+            domain_label = 0 ## has coordinate map loss
+
+            
+            mask_im = np.zeros((info['height'], info['width']), dtype=np.uint8)
+            coord_map = np.zeros((info['height'], info['width'], 3), dtype=np.uint8)
+
+            coord_map = coord_map[:, :, (2, 1, 0)]
+
+            masks, coords, class_ids, scales = self.process_data(mask_im, coord_map, inst_dict, meta_path, source=info["source"])
+
         else:
             assert False, f'[ Error ]: Unknown image source: {info["source"]}'
 
@@ -542,7 +597,7 @@ class NOCSDataset(utils.Dataset):
         # generate random rotation degree
         rotate_degree = np.random.uniform(-5, 5)
 
-        if info["source"] in ["CAMERA", "Real", "HABITAT"]:
+        if info["source"] in ["CAMERA", "Real", "HABITAT","realsense"]:
             domain_label = 0 ## has coordinate map loss
 
             mask_path = info["path"] + '_mask.png'

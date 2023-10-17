@@ -1,5 +1,8 @@
 import numpy as np
 from utils.evaluation.tools import compute_mAP,compute_ap_from_matches_scores
+import matplotlib.pyplot as plt
+import os
+import wandb
 
 class MeanAveragePrecisionCalculator:
     def __init__(self, config_dict):
@@ -92,6 +95,112 @@ class MeanAveragePrecisionCalculator:
                 print(f'{k}: {v:.1f}')
 
         return results
+
+    def plot_map_curves(self,log:callable=wandb.log):
+        # draw iou 3d AP vs. iou thresholds
+        fig_iou = plt.figure()
+        ax_iou = plt.subplot(111)
+        plt.ylabel('AP')
+        plt.ylim((0, 1))
+        plt.xlabel('3D IoU thresholds')
+        log_dir='/home/kdesingh/chada022/torch_nocs/checkpoints/map_curves'
+        iou_output_path = os.path.join(log_dir, 'IoU_3D_AP_{}-{}.png'.format(self.iou_thres_list[0], self.iou_thres_list[-1]))
+        iou_dict_pkl_path = os.path.join(log_dir, 'IoU_3D_AP_{}-{}.pkl'.format(self.iou_thres_list[0], self.iou_thres_list[-1]))
+
+        iou_dict = {}
+        iou_dict['thres_list'] = self.iou_thres_list
+
+        for cls_id in range(1, self.num_classes):
+            class_name = self.synset_names[cls_id]
+            ax_iou.plot(self.iou_thres_list, self.iou_3d_aps[cls_id, :], label=class_name)
+        ax_iou.plot(self.iou_thres_list, self.iou_3d_aps[-1, :], label='mean')
+        ax_iou.legend()
+        ax_iou.set_title("IoU vs AP")
+        ax_iou.set_xlabel("IoU Threshold")
+        ax_iou.set_ylabel("Average Precision")
+
+        # Log the plot to wandb
+        log({"IoU_vs_AP": wandb.Image(fig_iou)})
+        plt.close(fig_iou)
+
+        for cls_id in range(1, self.num_classes):
+            class_name = self.synset_names[cls_id]
+            print(class_name)
+            # print(np.amin(aps[i, :, :]), np.amax(aps[i, :, :]))
+        
+            #ap_image = cv2.resize(pose_aps[cls_id, :, :]*255, (320, 320), interpolation = cv2.INTER_LINEAR)
+            fig_iou = plt.figure()
+            ax_iou = plt.subplot(111)
+            plt.ylabel('Rotation thresholds/degree')
+            plt.ylim((self.degree_thres_list[0], self.degree_thres_list[-2]))
+            plt.xlabel('translation/cm')
+            plt.xlim((self.shift_thres_list[0], self.shift_thres_list[-2]))
+            plt.imshow(self.pose_aps[cls_id, :-1, :-1], cmap='jet', interpolation='bilinear')
+
+            output_path = os.path.join(log_dir,'AP_{}_{}-{}degree_{}-{}cm.png'.format(class_name, 
+                                                                                    self.degree_thres_list[0], self.degree_thres_list[-2], 
+                                                                                    self.shift_thres_list[0], self.shift_thres_list[-2]))
+            output_name= 'AP_{}_{}-{}degree_{}-{}cm'.format(class_name,self.degree_thres_list[0], self.degree_thres_list[-2], 
+                                                                            self.shift_thres_list[0], self.shift_thres_list[-2])
+            plt.colorbar()
+            log({output_name: wandb.Image(fig_iou)})
+            plt.close(fig_iou)        
+        
+        #ap_mean_image = cv2.resize(pose_aps[-1, :, :]*255, (320, 320), interpolation = cv2.INTER_LINEAR) 
+        
+        fig_pose = plt.figure()
+        ax_pose = plt.subplot(111)
+        plt.ylabel('Rotation thresholds/degree')
+        plt.ylim((self.degree_thres_list[0], self.degree_thres_list[-2]))
+        plt.xlabel('translation/cm')
+        plt.xlim((self.shift_thres_list[0], self.shift_thres_list[-2]))
+        plt.imshow(self.pose_aps[-1, :-1, :-1], cmap='jet', interpolation='bilinear')
+        output_path = os.path.join(log_dir,'mAP_{}-{}degree_{}-{}cm.png'.format(self.degree_thres_list[0], self.degree_thres_list[-2], 
+                                                                                self.shift_thres_list[0], self.shift_thres_list[-2]))
+        output_name='mAP_{}-{}degree_{}-{}cm'.format(self.degree_thres_list[0], self.degree_thres_list[-2], 
+                                                                                self.shift_thres_list[0], self.shift_thres_list[-2])
+        plt.colorbar()
+        #plt.savefig(output_path)
+        log({output_name: wandb.Image(fig_pose)})
+        plt.close(fig_pose)
+
+        
+        fig_rot = plt.figure()
+        ax_rot = plt.subplot(111)
+        plt.ylabel('AP')
+        plt.ylim((0, 1.05))
+        plt.xlabel('translation/cm')
+        for cls_id in range(1, self.num_classes):
+            class_name = self.synset_names[cls_id]
+            print(class_name)
+            ax_rot.plot(self.shift_thres_list[:-1], self.pose_aps[cls_id, -1, :-1], label=class_name)
+        
+        ax_rot.plot(self.shift_thres_list[:-1], self.pose_aps[-1, -1, :-1], label='mean')
+        output_path = os.path.join(log_dir,'mAP_{}-{}cm.png'.format(self.shift_thres_list[0], self.shift_thres_list[-2]))
+        output_name='mAP_{}-{}cm.png'.format(self.shift_thres_list[0], self.shift_thres_list[-2])
+        ax_rot.legend()
+        #fig_rot.savefig(output_path)
+        log({output_name: wandb.Image(fig_rot)})
+        plt.close(fig_rot)
+
+        fig_trans = plt.figure()
+        ax_trans = plt.subplot(111)
+        plt.ylabel('AP')
+        plt.ylim((0, 1.05))
+
+        plt.xlabel('Rotation/degree')
+        for cls_id in range(1, self.num_classes):
+            class_name = self.synset_names[cls_id]
+            ax_trans.plot(self.degree_thres_list[:-1], self.pose_aps[cls_id, :-1, -1], label=class_name)
+
+        ax_trans.plot(self.degree_thres_list[:-1], self.pose_aps[-1, :-1, -1], label='mean')
+        output_path = os.path.join(log_dir,'mAP_{}-{}degree.png'.format(self.degree_thres_list[0], self.degree_thres_list[-2]))
+        output_name='mAP_{}-{}degree.png'.format(self.degree_thres_list[0], self.degree_thres_list[-2])
+        ax_trans.legend()
+        fig_trans.savefig(output_path)
+        log({output_name: wandb.Image(fig_trans)})
+        plt.close(fig_trans)
+
 
 
     def get_pose_aps(self, rot, shift, run_idx=None):

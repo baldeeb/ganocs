@@ -103,7 +103,9 @@ def discriminator_as_loss(discriminator:Union[DiscriminatorWithOptimizer,
 def get_list_samples_with_gt_nocs(x, nocs_gt_available):
     return [vi for vi, s in zip(x, nocs_gt_available) if s]
 
-def get_indices_of_detections_with_gt_nocs(nocs_gt_available, matched_idxs):
+def get_indices_of_detections_with_gt_nocs(nocs_gt_available, matched_idxs,gt_labels):
+    if matched_idxs==None:
+        return None
     len_s = [len(v) for v in matched_idxs]
     zs, os = lambda a: torch.zeros(a, dtype=torch.bool), lambda a: torch.ones(a, dtype=torch.bool)
     return torch.cat([os(l) if i else zs(l) for i, l in zip(nocs_gt_available, len_s)])
@@ -157,14 +159,23 @@ def nocs_loss(gt_labels,
     '''
 
     # Find samples with gt nocs
+    # if unlabelled_imgs:
+    #     detections_with_gt_nocs=None
+    #     labels=gt_labels
+    #     # labels = [gt_label[idxs] for gt_label, idxs in zip(gt_labels, matched_ids)]
+    #     proposals = select_labels_in_dict(nocs_proposals, labels)  # Dict (3 values) [T, N, H, W] 
+    #     proposals = torch.stack(tuple(proposals.values()), dim=1) # [T, 3, N, H, W] 
+    #     targets=[]
+
+    # else:
     if samples_with_valid_targets is None:
         samples_with_valid_targets = [g.sum().item() > 0 for g in gt_nocs]
     
     detections_with_gt_nocs = get_indices_of_detections_with_gt_nocs(
                                                         samples_with_valid_targets,
-                                                        matched_ids),
-    
-    if loss_fx == cross_entropy or not kwargs.get('use_unlabeled_nocs', False):
+                                                        matched_ids,gt_labels)
+    #if loss_fx == cross_entropy or not kwargs.get('use_unlabeled_nocs', False):
+    if loss_fx == cross_entropy:
         # Only keep samples with valid targets
         gt_labels = get_list_samples_with_gt_nocs(gt_labels, samples_with_valid_targets)
         gt_nocs = get_list_samples_with_gt_nocs(gt_nocs, samples_with_valid_targets)
@@ -176,16 +187,24 @@ def nocs_loss(gt_labels,
         detections_with_gt_nocs = [1] * len(gt_labels)
 
     # Select the label for each proposal
-    labels = [gt_label[idxs] for gt_label, idxs in zip(gt_labels, matched_ids)]
+    if matched_ids:
+        labels = [gt_label[idxs] if idxs!=None else gt_label for gt_label, idxs in zip(gt_labels, matched_ids)]
+    else:
+        labels=gt_labels
     proposals = select_labels_in_dict(nocs_proposals, labels)  # Dict (3 values) [T, N, H, W] 
     proposals = torch.stack(tuple(proposals.values()), dim=1) # [T, 3, N, H, W] 
-    masked_nocs = [n[:, None] * m[None].to(n) for n, m in zip(gt_nocs, gt_masks)]
+   
 
     # Reshape to fit box by performing roi_align
     W = proposals.shape[-1]  # Width of proposal we want gt to match
-    targets = [project_on_boxes(m, p, i, W) 
-        for m, p, i in zip(masked_nocs, box_proposals, matched_ids)]
-    targets = torch.cat(targets, dim=0) # [B, 3, H, W]
+
+    if gt_nocs:
+        masked_nocs = [n[:, None] * m[None].to(n) for n, m in zip(gt_nocs, gt_masks)]
+        targets = [project_on_boxes(m, p, i, W) 
+            for m, p, i in zip(masked_nocs, box_proposals, matched_ids)]
+        targets = torch.cat(targets, dim=0) # [B, 3, H, W]
+    else:
+        targets=torch.empty()
 
     if loss_fx == cross_entropy:
         # If target is empty return 0

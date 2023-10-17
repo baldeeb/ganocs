@@ -13,16 +13,26 @@ def collate_fn(batch):
         if data[2] is None: intrinsics = None
         else: intrinsics = torch.as_tensor(data[2]).float()
         
-        labels          = torch.as_tensor(data[3]).type(torch.int64)
-        b               = torch.as_tensor(data[4])[:, :4].float()  # 5 dim, last dim might be class or anchor
-        boxes           = torch.stack([b[:, 1], b[:, 0], b[:, 3], b[:, 2]], dim=1) # width min, height min, width max, height max
-        masks           = torch.as_tensor(data[5]).permute(2, 0, 1).bool()
-        nocs            = torch.as_tensor(data[6]).float().sum(dim=2).permute(2, 0, 1)
-        ignore_nocs     = torch.as_tensor(data[7]).float()
-        scales          = torch.as_tensor(data[8]).float()
+        if data[3] is None: labels = None
+        else: labels          = torch.as_tensor(data[3]).type(torch.int64)
 
-        if len(labels.shape) == 0 or labels.shape[0] == 0: 
-            raise RuntimeError(f'Warning: collate called on data with no labels.')
+        if data[4] is None: 
+            b = None
+            boxes= torch.empty((0, 4))
+        else: 
+            b               = torch.as_tensor(data[4])[:, :4].float()  # 5 dim, last dim might be class or anchor
+            boxes           = torch.stack([b[:, 1], b[:, 0], b[:, 3], b[:, 2]], dim=1) # width min, height min, width max, height max
+        if data[5] is None: masks = torch.zeros(4,data[0].shape[0], data[0].shape[1],dtype=torch.bool)
+        else: masks           = torch.as_tensor(data[5]).permute(2, 0, 1).bool()
+        if data[6] is None: nocs = torch.empty(3,data[0].shape[0], data[0].shape[1])
+        else: nocs            = torch.as_tensor(data[6]).float().sum(dim=2).permute(2, 0, 1)
+        if data[7] is None: ignore_nocs = False
+        else: ignore_nocs     = torch.as_tensor(data[7]).float()
+        if data[8] is None: scales = torch.empty(4,3)
+        else: scales          = torch.as_tensor(data[8]).float()
+
+        # if len(labels.shape) == 0 or labels.shape[0] == 0: 
+        #     raise RuntimeError(f'Warning: collate called on data with no labels.')
 
         rgb.append(torch.as_tensor(data[0].copy()).permute(2, 0, 1))
 

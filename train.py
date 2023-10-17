@@ -18,6 +18,8 @@ from utils.model import get_model_parameters
 def targets2device(targets, device):
     for i in range(len(targets)): 
         for k in ['masks', 'labels', 'boxes']: 
+            if targets[i][k]==None:
+                continue
             targets[i][k] = targets[i][k].to(device)
     return targets
 
