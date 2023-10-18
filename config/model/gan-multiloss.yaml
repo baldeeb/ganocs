@@ -32,6 +32,10 @@ nocs_loss:
       _target_: torch.nn.MSELoss
       reduction: mean
 
+nocs_loss_weights: 
+  'discriminator': 0.5
+  'mse': 1.0
+
 # feat_ch: 16
 
 

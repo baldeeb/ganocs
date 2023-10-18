@@ -10,8 +10,7 @@ load:  # Set to load checkpoint
 
 # nocs loss config
 nocs_loss: 
-  _target_: hydra.utils.get_method
-  path: torch.nn.functional.cross_entropy
+  _target_: torch.nn.CrossEntropyLoss
 
 # nocs head config
 nocs_head:

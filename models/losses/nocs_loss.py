@@ -122,7 +122,7 @@ def get_loss_objectives(loss_fx):
         discriminator_loss = loss_fx['discriminator'] if 'discriminator' in loss_fx else None
         cross_entropy_loss = loss_fx['cross_entropy'] if 'cross_entropy' in loss_fx else None
         mse_loss = loss_fx['mse'] if 'mse' in loss_fx else None
-    elif isinstance(loss_fx, cross_entropy):
+    elif isinstance(loss_fx, torch.nn.CrossEntropyLoss):
         cross_entropy_loss = loss_fx
     elif isinstance(loss_fx, torch.nn.MSELoss):
         mse_loss = loss_fx
@@ -147,7 +147,7 @@ def nocs_loss(gt_labels,
               loss_fx:Union[Dict, Callable]=cross_entropy,
               nocs_loss_mode='classification', # regression or classification
               dispersion_loss=None, # TODO: integrate into loss_fx
-              dispersion_weight=0.0,
+              dispersion_weight=0.0, # TODO: substitute with loss_weights
               depth=None,
               samples_with_valid_targets=None,
               **kwargs):
@@ -191,6 +191,7 @@ def nocs_loss(gt_labels,
 
     
     entropy_loss, mse_loss, discriminator_loss = get_loss_objectives(loss_fx)
+    loss_weights = kwargs.get('loss_weights', {})
 
     if entropy_loss is not None or not kwargs.get('use_unlabeled_nocs', False):
         # When not using discriminator or when specifically asked not to train with unlabeled data, 
@@ -228,10 +229,17 @@ def nocs_loss(gt_labels,
             pmin, pmax = proposals.min(), proposals.max() 
             tau = min([thresh/abs(pmin), thresh/pmax, 1.0])
             proposals = proposals * tau # multiply by temperature
-        loss += cross_entropy(proposals.transpose(1,2), targets_discretized, reduction=reduction)
+        loss += cross_entropy(proposals.transpose(1,2), 
+                              targets_discretized, 
+                              reduction=reduction
+                ) * loss_weights.get('cross_entropy', 1.0)
+
     if mse_loss is not None:
         assert proposals.shape[2] == 1, 'Expecting only single bin per color.'
-        loss += mse_loss(proposals.squeeze(2), targets)
+        loss += mse_loss(proposals.squeeze(2), 
+                         targets
+                ) * loss_weights.get('mse', 1.0)
+
     if discriminator_loss is not None: 
         disc_kwargs = {
             'has_gt':   detections_with_gt_nocs,
@@ -253,7 +261,8 @@ def nocs_loss(gt_labels,
                                      reduction=reduction,
                                      mode=nocs_loss_mode,
                                      **disc_kwargs
-                                    )
+                    ) * loss_weights.get('discriminator', 1.0)
+    
     if dispersion_loss is not None:
         # Motivates the distribution of the proposal to be similar to that of target
         loss += dispersion_loss(proposals, targets) * dispersion_weight
