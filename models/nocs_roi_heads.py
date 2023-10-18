@@ -104,7 +104,7 @@ class RoIHeadsWithNocs(RoIHeads):
         else:
             raise RuntimeError('Missuse of function.')
         
-    def process_without_gt(self, features, proposals, image_shapes,targets):
+    def process_without_gt(self, features, proposals, image_shapes,targets,result):
         """
         Computes boxes, scores, and labels for the given features, proposals, and image shapes
         without ground truth.
@@ -124,6 +124,15 @@ class RoIHeadsWithNocs(RoIHeads):
         class_logits, box_regression = self.box_predictor(box_features)
         boxes, scores, labels_no_gt = self.postprocess_detections(class_logits, box_regression, proposals, image_shapes)
         num_images = len(proposals)
+        if not self.training or self.cache_results:
+            for i in range(num_images):
+                result.append(
+                    {
+                        "boxes":  self._properly_allocate(boxes[i]),
+                        "labels": self._properly_allocate(labels_no_gt[i]),
+                        "scores": self._properly_allocate(scores[i]),
+                    }
+                )
         proposed_box_regions = []
         pos_matched_idxs = []
         for img_id in range(num_images):
@@ -131,7 +140,7 @@ class RoIHeadsWithNocs(RoIHeads):
             proposed_box_regions.append(proposals[img_id][pos])
         pos_matched_idxs = None
         mask_features_no_gt = self.mask_roi_pool(features, proposed_box_regions, image_shapes)
-        #mask_features = self.mask_roi_pool(features, proposed_box_regions, image_shapes)
+        mask_logits_no_gt = self.mask_predictor(mask_features_no_gt)
         if self.has_nocs():
             nocs_proposals_no_gt = self.nocs_heads(mask_features_no_gt)
 
@@ -141,7 +150,7 @@ class RoIHeadsWithNocs(RoIHeads):
         nocs_gt_available = [not t.get('no_nocs', False) for t in targets]
         use_unlabeled_nocs = self._kwargs.get('use_unlabeled_nocs', False)
         
-        return labels_no_gt,nocs_proposals_no_gt,proposed_box_regions,depth,nocs_gt_available
+        return labels_no_gt,nocs_proposals_no_gt,proposed_box_regions,depth,nocs_gt_available,mask_logits_no_gt
 
 
     def _check_target_contents(self, targets):
@@ -185,7 +194,7 @@ class RoIHeadsWithNocs(RoIHeads):
             return self.multiview_consistency(features, proposals_with_gt, image_shapes_with_gt, targets_with_gt)
         
         #if targets is not None: self._check_target_contents(targets)
-        gt_labels,proposed_box_regions,depth,nocs_gt_available,nocs_proposals,gt_nocs,gt_masks,pos_matched_idxs,loss_mask,losses =[],[],[],[],{},None,None,None,{},{}
+        gt_labels,proposed_box_regions,depth,nocs_gt_available,nocs_proposals,gt_nocs,gt_masks,pos_matched_idxs,loss_mask,losses,mask_logits =[],[],[],[],{},None,None,None,{},{},None
         result: List[Dict[str, torch.Tensor]] = []
         if proposals_with_gt:
             if self.training:
@@ -259,8 +268,17 @@ class RoIHeadsWithNocs(RoIHeads):
                 rcnn_loss_mask = maskrcnn_loss(mask_logits, proposed_box_regions, 
                                                 gt_masks, gt_labels, pos_matched_idxs)
                 loss_mask = {"loss_mask": rcnn_loss_mask}
-
-            # Add NOCS to Loss ##########################################################################################
+        if proposals_no_gt:
+            labels_no_gt,nocs_proposals_no_gt,proposed_box_regions_no_gt,depth_no_gt,nocs_gt_available_no_gt,mask_logits_no_gt= self.process_without_gt(features,proposals_no_gt,image_shapes_no_gt,targets_no_gt,result)
+            gt_labels=gt_labels+labels_no_gt
+            proposed_box_regions=proposed_box_regions+proposed_box_regions_no_gt
+            depth=depth+depth_no_gt
+            nocs_gt_available=nocs_gt_available+nocs_gt_available_no_gt
+            if not nocs_proposals:
+                nocs_proposals=nocs_proposals_no_gt
+            else:
+                nocs_proposals = {key: torch.cat([nocs_proposals.get(key, torch.zeros([0, 7, 1, 28, 28])), nocs_proposals_no_gt.get(key, torch.zeros([0, 7, 1, 28, 28]))], dim=0) for key in set(nocs_proposals) | set(nocs_proposals_no_gt)}
+        # Add NOCS to Loss ##########################################################################################
         if self.has_nocs() and self.training:
             gt_nocs = [t["nocs"].to(mask_logits.device) for t in targets_with_gt]
 
@@ -269,16 +287,7 @@ class RoIHeadsWithNocs(RoIHeads):
 
             nocs_gt_available = [not t.get('no_nocs', False) for t in targets_with_gt]
             use_unlabeled_nocs = self._kwargs.get('use_unlabeled_nocs', False)
-            if proposals_no_gt:
-                labels_no_gt,nocs_proposals_no_gt,proposed_box_regions_no_gt,depth_no_gt,nocs_gt_available_no_gt= self.process_without_gt(features,proposals_no_gt,image_shapes_no_gt,targets_no_gt)
-                gt_labels=gt_labels+labels_no_gt
-                proposed_box_regions=proposed_box_regions+proposed_box_regions_no_gt
-                depth=depth+depth_no_gt
-                nocs_gt_available=nocs_gt_available+nocs_gt_available_no_gt
-                if not nocs_proposals:
-                    nocs_proposals=nocs_proposals_no_gt
-                else:
-                    nocs_proposals = {key: torch.cat([nocs_proposals.get(key, torch.zeros([0, 7, 1, 28, 28])), nocs_proposals_no_gt.get(key, torch.zeros([0, 7, 1, 28, 28]))], dim=0) for key in set(nocs_proposals) | set(nocs_proposals_no_gt)}
+
 
 
             if any(nocs_gt_available) or use_unlabeled_nocs:
@@ -315,66 +324,40 @@ class RoIHeadsWithNocs(RoIHeads):
 
             
 
-        # else:
-        #     labels = [r["labels"] for r in result]
-        #     masks_probs = maskrcnn_inference(mask_logits, labels)
-        #     for mask_prob, r in zip(masks_probs, result):
-        #         r["masks"] = mask_prob
+        else:
+            box_features = self.box_roi_pool(features, proposals, image_shapes)
+            box_features = self.box_head(box_features)
+            class_logits, box_regression = self.box_predictor(box_features)
+            boxes, scores, labels = self.postprocess_detections(class_logits, box_regression, proposals, image_shapes)
+            num_images = len(boxes)
+            for i in range(num_images):
+                result.append(
+                    {
+                        "boxes":  self._properly_allocate(boxes[i]),
+                        "labels": self._properly_allocate(labels[i]),
+                        "scores": self._properly_allocate(scores[i]),
+                    }
+                )
+            labels = [r["labels"] for r in result]
+            proposed_box_regions = [p["boxes"] for p in result]
+            mask_features = self.mask_roi_pool(features, proposed_box_regions, image_shapes)
+
+            if self.has_nocs():
+                nocs_proposals = self.nocs_heads(mask_features)
+
+            mask_features = self.mask_head(mask_features)
+            mask_logits = self.mask_predictor(mask_features)
+            masks_probs = maskrcnn_inference(mask_logits, labels)
+            for mask_prob, r in zip(masks_probs, result):
+                r["masks"] = mask_prob
             
-        #     # Add NOCS to results
-        #     if self.has_nocs():
-        #         nocs_maps = select_nocs_proposals(nocs_proposals, labels, 
-        #                                             self.nocs_heads.num_classes)
-        #         for n, r in zip(nocs_maps, result): r['nocs'] = n
+            # Add NOCS to results
+            if self.has_nocs():
+                nocs_maps = select_nocs_proposals(nocs_proposals, labels, 
+                                                    self.nocs_heads.num_classes)
+                for n, r in zip(nocs_maps, result): r['nocs'] = n
 
         losses.update(loss_mask)
-
-        # elif self.training and self.ignore_all_except_nocs:
-        #     loss_mask = {}
-        #     num_images = len(proposals)
-        #     proposed_box_regions = []
-        #     pos_matched_idxs = []
-        #     for img_id in range(num_images):
-        #         pos = torch.where(labels[img_id] > 0)[0]
-        #         proposed_box_regions.append(proposals[img_id][pos])
-        #         pos_matched_idxs.append(matched_idxs[img_id][pos])
-        #     pos_matched_idxs = None
-
-        #     mask_features = self.mask_roi_pool(features, proposed_box_regions, image_shapes)
-        #     if self.has_nocs():
-        #         nocs_proposals = self.nocs_heads(mask_features)
-
-        #     if len(targets)> 0 and 'depth' in targets[0]:
-        #         depth = [t['depth'] for t in targets]
-
-        #     nocs_gt_available = [not t.get('no_nocs', False) for t in targets]
-        #     use_unlabeled_nocs = self._kwargs.get('use_unlabeled_nocs', False)
-        #     if any(nocs_gt_available) or use_unlabeled_nocs:
-
-        #         reduction = 'none' if self.cache_results else 'mean'
-        #         labels = [r["labels"] for r in result]
-        #         loss_mask["loss_nocs"] = nocs_loss(labels, 
-        #                                             None, 
-        #                                             None,
-        #                                             nocs_proposals, 
-        #                                             proposed_box_regions,
-        #                                             pos_matched_idxs,self.ignore_all_except_nocs,
-        #                                             reduction=reduction,
-        #                                             loss_fx=self.nocs_loss,
-        #                                             nocs_loss_mode=self.nocs_loss_mode,
-        #                                             depth=depth,
-        #                                             samples_with_valid_targets=nocs_gt_available,
-        #                                             **self._kwargs)
-                
-        #         if self.cache_results:
-        #             split_loss = separate_image_results(loss_mask['loss_nocs'], labels)
-        #             split_nocs = separate_image_results(nocs_proposals, labels)
-        #             for i in range(len(result)):
-        #                 result[i]['nocs'] = {k:self._properly_allocate(v[i]) 
-        #                                     for k, v in split_nocs.items()}
-        #                 obj_loss = split_loss[i].mean((1,2,3))
-        #                 result[i]['loss_nocs'] = self._properly_allocate(obj_loss)
-        #             loss_mask["loss_nocs"] = torch.mean(loss_mask["loss_nocs"])
 
         # keep none checks in if conditional so torchscript will conditionally
         # compile each branch
