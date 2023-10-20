@@ -1,31 +1,36 @@
 defaults:
   - base
-  - override model:  gan
+  - override model:  gan-multiloss
   - _self_
 
 log:    True
 logger:
-  name: gan
+  name: gan-multiloss
 
-device:              cuda:0
-
-model:
-  use_unlabeled_nocs: True  # When set to true, images with no nocs will train the generator
-
-  # load: 
-  #   path: checkpoints/gan-nocs/gan-new-architecture/2023-10-02_23-39-02/0199_000249.pth
-  #   ignore_keys: 
-    
-  # load: 
-  #   path: checkpoints/gan-nocs/base-continuous/2023-09-21_11-00-56/0104_000000.pth
-  #   ignore_keys: ['discriminator']
-
-
-  # feat_ch: 16
+device: cuda:0
 
 optimization:
   optimizer: 
     _target_: torch.optim.Adam
     lr: 0.0002
     betas: [0.5, 0.99]
-    # weight_decay: 1e-6
+    weight_decay: 1e-6
+  parameters: [roi_heads, rpn, fpn]
+  
+  # multiple: True
+  # optimizers: 
+  #     -
+  #       _target_: torch.optim.Adam
+  #       lr: 0.0002
+  #       betas: [0.5, 0.99]
+  #       weight_decay: 1e-6
+  #     - 
+  #       _target_: torch.optim.Adam
+  #       lr: 0.0002
+  #       betas: [0.5, 0.99]
+  #       weight_decay: 1e-6
+
+  # parameters:
+  #   - ['backbone', 'fpn', 'rpn', 'roi_heads']
+  #   - ['nocs_head']
+  #   - ['discriminator']

@@ -5,8 +5,10 @@ maskrcnn_weights:
   _target_: hydra.utils.get_object
   path: torchvision.models.detection.mask_rcnn.MaskRCNN_ResNet50_FPN_Weights.DEFAULT
 
-# pretrained nocs weights
+# # pretrained nocs weights
 load:
+#   path: checkpoints/gan-nocs/gan-with-l2/2023-10-17_15-50-32/0221_000000.pth
+#   ignore_keys: 
 
 # nocs loss config
 nocs_loss:
@@ -32,9 +34,18 @@ nocs_loss:
       _target_: torch.nn.MSELoss
       reduction: mean
 
-nocs_loss_weights: 
-  'discriminator': 0.5
-  'mse': 1.0
+loss_weights: 
+  # 'discriminator': 0.25
+  # 'mse': 1.0
+  'mse':
+    _target_: utils.dummy_rate_setter.DummyRateSetter
+    rates: [1.0]
+  'discriminator':
+    _target_: utils.dummy_rate_setter.DummyRateSetter 
+    # rates: [0.0]
+    rates: [0.0, 0.25, 0.5]
+    inflections: [10000, 50000]
+
 
 # feat_ch: 16
 
@@ -45,7 +56,7 @@ nocs_head_params:
   mode: regression
   head_per_channel: True
   # head_per_class: True
-  # net_style: tiny
+  # net_style: experimental
   # layers: 
 
 #### Post processing params ####################

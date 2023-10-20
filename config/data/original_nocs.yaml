@@ -18,7 +18,7 @@ camera_dir: ./data/original_nocs_data/camera
 real_dir:   ./data/original_nocs_data/real
 coco_dir:   ./data/original_nocs_data/coco
 
-batch_size: 6
+batch_size: 5
 steps_per_epoch: 1000
 depth_scale: 0.001  # mm to m
 
@@ -72,7 +72,7 @@ training:
       intrinsics: [[577.5, 0, 319.5], [0., 577.5, 239.5], [0., 0., 1.]]
     coco:
       dataset_dir: ${data.coco_dir}
-      weight: 1
+      weight: 0
       intrinsics: 
 
 validation:
