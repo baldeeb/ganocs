@@ -212,8 +212,8 @@ class RoIHeadsWithNocs(RoIHeads):
                         depth = [t['depth'] for t in targets]
 
                     nocs_gt_available = [not t.get('no_nocs', False) for t in targets]
-                    use_unlabeled_nocs = self._kwargs.get('use_unlabeled_nocs', False)
-                    if any(nocs_gt_available) or use_unlabeled_nocs:
+                    use_unlabeled_nocs_data = 'only_use_nocs_labels' not in self._kwargs
+                    if any(nocs_gt_available) or use_unlabeled_nocs_data:
 
                         reduction = 'none' if self.cache_results else 'mean'
 
