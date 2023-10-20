@@ -58,3 +58,18 @@ def load_nocs(**kwargs):
                         f'missing & unexpected  keys: {missing}'+
                         f'and only ignored: {ignore_keys}')
     return model
+
+
+def load_discriminator(**kwargs):
+    model = kwargs['model']
+    map_loc = 'cpu' if kwargs.get('device', 'cpu')=="cpu" else None 
+    sd = torch.load(kwargs['checkpoint'], map_location=map_loc)
+    if 'discriminator' in sd:
+        model.load_state_dict(sd['discriminator'])
+    else:
+        msd = model.state_dict()
+        for n, p in model.named_parameters():
+            param = [sd_p for sd_n, sd_p in sd.items() if n in sd_n][0]
+            msd[n] = param
+        model.load_state_dict(msd)
+    return model
