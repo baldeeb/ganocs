@@ -29,7 +29,7 @@ def collate_fn(batch):
         targets.append({
             'depth': depth, 
             'masks': masks, 
-            'nocs': nocs,
+            'nocs': nocs * float(1.0 - int(ignore_nocs)),
             'labels': labels, 
             'boxes': boxes, 
             'scales': scales,
