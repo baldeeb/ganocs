@@ -105,7 +105,8 @@ class MultiDiscriminatorWithOptimizer(nn.Module):
         return self._update(data, False, classes, **kwargs)
 
     def forward(self, x, classes, **kwargs):
-        return self.forward_all(x, classes, **kwargs)
+        # return self.forward_all(x, classes, **kwargs)
+        return self.forward_separate(x, classes, **kwargs)
     
     def forward_separate(self, x, classes, **kwargs):
         '''assumes kwargs are lists of the same length as classes'''
