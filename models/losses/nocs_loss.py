@@ -136,6 +136,8 @@ def get_loss_objectives(loss_fx):
                             DepthAwareDiscriminator))
     return cross_entropy_loss, mse_loss, discriminator_loss
 
+def get_loss_weights(loss_weights, default=lambda:1.0):
+    return {k:loss_weights.get(k, default) for k in ['cross_entropy', 'mse', 'discriminator']}
 
 def nocs_loss(gt_labels, 
               gt_nocs,
@@ -188,22 +190,10 @@ def nocs_loss(gt_labels,
     detections_with_gt_nocs = get_indices_of_detections_with_gt_nocs(
                                                         samples_with_valid_targets,
                                                         matched_ids),
-
+    select_with_gt_nocs = lambda x : x[detections_with_gt_nocs]
     
     entropy_loss, mse_loss, discriminator_loss = get_loss_objectives(loss_fx)
-    loss_weights = kwargs.get('loss_weights', {})
-
-    if entropy_loss is not None or not kwargs.get('use_unlabeled_nocs', False):
-        # When not using discriminator or when specifically asked not to train with unlabeled data, 
-        #   only keep samples with valid targets
-        gt_labels = get_list_samples_with_gt_nocs(gt_labels, samples_with_valid_targets)
-        gt_nocs = get_list_samples_with_gt_nocs(gt_nocs, samples_with_valid_targets)
-        gt_masks = get_list_samples_with_gt_nocs(gt_masks, samples_with_valid_targets)
-        nocs_proposals = get_dict_samples_with_gt_nocs(nocs_proposals, detections_with_gt_nocs)
-        box_proposals = get_list_samples_with_gt_nocs(box_proposals, samples_with_valid_targets)
-        matched_ids = get_list_samples_with_gt_nocs(matched_ids, samples_with_valid_targets)
-        depth = get_list_samples_with_gt_nocs(depth, samples_with_valid_targets)
-        detections_with_gt_nocs = [1] * len(gt_labels)
+    loss_weight_fxs = get_loss_weights(kwargs.get('loss_weights', {}))
 
     # Select the label for each proposal
     labels = [gt_label[idxs] for gt_label, idxs in zip(gt_labels, matched_ids)]
@@ -229,16 +219,17 @@ def nocs_loss(gt_labels,
             pmin, pmax = proposals.min(), proposals.max() 
             tau = min([thresh/abs(pmin), thresh/pmax, 1.0])
             proposals = proposals * tau # multiply by temperature
-        loss += cross_entropy(proposals.transpose(1,2), 
-                              targets_discretized, 
+        loss += cross_entropy(select_with_gt_nocs(proposals).transpose(1,2), 
+                              select_with_gt_nocs(targets_discretized), 
                               reduction=reduction
-                ) * loss_weights.get('cross_entropy', 1.0)
+                ) * loss_weight_fxs['cross_entropy']()
 
     if mse_loss is not None:
         assert proposals.shape[2] == 1, 'Expecting only single bin per color.'
-        loss += mse_loss(proposals.squeeze(2), 
-                         targets
-                ) * loss_weights.get('mse', 1.0)
+        loss += mse_loss(
+                select_with_gt_nocs(proposals).squeeze(2), 
+                select_with_gt_nocs(targets), 
+            ) * loss_weight_fxs['mse']()
 
     if discriminator_loss is not None: 
         disc_kwargs = {
@@ -247,13 +238,12 @@ def nocs_loss(gt_labels,
             'depth':    None }
 
         if 'depth_context' in discriminator_loss.properties:
-            
             masked_depth = [(d.to(device) * m.to(device))[None] for d, m in zip(depth, gt_masks)]
             target_depths = [project_on_boxes(m, p, i, W) for m, p, i in zip(masked_depth, box_proposals, matched_ids)]
             disc_kwargs['depth'] = torch.cat(target_depths, dim=0) # [B, 1, H, W]
             # mu = disc_kwargs['depth'].mean((-2, -1))
-            mu = disc_kwargs['depth'].flatten(-2, -1).median(-1).values
-            disc_kwargs['depth'] = disc_kwargs['depth'] - mu[:, None, None]
+            # mu = disc_kwargs['depth'].flatten(-2, -1).median(-1).values
+            # disc_kwargs['depth'] = disc_kwargs['depth'] - mu[:, None, None]
 
         loss += discriminator_as_loss(discriminator_loss, 
                                      proposals, 
@@ -261,7 +251,7 @@ def nocs_loss(gt_labels,
                                      reduction=reduction,
                                      mode=nocs_loss_mode,
                                      **disc_kwargs
-                    ) * loss_weights.get('discriminator', 1.0)
+                    ) * loss_weight_fxs['discriminator']()
     
     if dispersion_loss is not None:
         # Motivates the distribution of the proposal to be similar to that of target
