@@ -54,7 +54,8 @@ def discriminator_as_loss(discriminator:Union[DiscriminatorWithOptimizer,
                           mode='classification',
                           has_gt=None,
                           classes:torch.Tensor=None,
-                          depth:torch.Tensor=None,):
+                          depth:torch.Tensor=None,
+                          disc_steps:int=1):
     '''
     Args:
         proposals (Tensor): [B, 3, N, H, W] tensor of predicted nocs
@@ -95,9 +96,13 @@ def discriminator_as_loss(discriminator:Union[DiscriminatorWithOptimizer,
         forward_kwargs['ctx']     = depth 
     
     # Train discriminator
-    discriminator.update_real(selected_targets, **update_real_kwargs)
-    discriminator.update_fake(prediction,       **update_fake_kwargs)
-
+    for _ in range(disc_steps):
+        # discriminator.update_real(selected_targets, **update_real_kwargs)
+        # discriminator.update_fake(prediction,       **update_fake_kwargs)
+        discriminator.update(real_data=selected_targets,
+                            fake_data=prediction,
+                            real_kwargs=update_real_kwargs,
+                            fake_kwargs=update_fake_kwargs)
     # Get nocs loss
     l = discriminator(x=prediction, 
                       **forward_kwargs)
@@ -235,7 +240,9 @@ def nocs_loss(gt_labels,
         disc_kwargs = {
             'has_gt':   detections_with_gt_nocs,
             'classes':  torch.cat(labels) if 'multiclass' in discriminator_loss.properties else None,
-            'depth':    None }
+            'depth':    None ,
+            'disc_steps': kwargs.get('discriminator_steps_per_batch', 1)
+            }
 
         if 'depth_context' in discriminator_loss.properties:
             masked_depth = [(d.to(device) * m.to(device))[None] for d, m in zip(depth, gt_masks)]
@@ -244,6 +251,14 @@ def nocs_loss(gt_labels,
             # mu = disc_kwargs['depth'].mean((-2, -1))
             # mu = disc_kwargs['depth'].flatten(-2, -1).median(-1).values
             # disc_kwargs['depth'] = disc_kwargs['depth'] - mu[:, None, None]
+
+        # # # # # # # # # # # # # # # # # # # # # # # # # # # # # # # # # # # # # # # # 
+        # # WHAT IF WE CONCAT MASK -> better inform discriminator
+        # masks = torch.cat([project_on_boxes(m[None].to(p), p, i, W) 
+        #                     for m, p, i in zip(gt_masks, box_proposals, matched_ids)])
+        # proposals = torch.cat([proposals, masks[:, :, None]], dim=1)
+        # targets = torch.cat([targets, masks], dim=1)
+        # # # # # # # # # # # # # # # # # # # # # # # # # # # # # # # # # # # # # # # # 
 
         loss += discriminator_as_loss(discriminator_loss, 
                                      proposals, 

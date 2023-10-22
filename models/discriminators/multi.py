@@ -7,24 +7,20 @@ from .optimizer_wrapper import DiscriminatorWithOptimizer
 
 class MultiClassDiscriminatorWithOptimizer(DiscriminatorWithOptimizer):
     def __init__(self, 
-                 in_ch=3, 
-                 feat_ch=64,
-                 num_classes=10,
+                 discriminator,
                  optimizer=torch.optim.Adam,
-                 optim_args={'lr':1e-4, 
-                             'betas':(0.5, 0.999)},
+                 optim_args={'lr':1e-4, 'betas':(0.5, 0.999)},
                  logger=None):
         '''Assumes class zero is discarded/background as does MRCNN.'''        
-        super().__init__(in_ch, feat_ch, 
+        super().__init__(discriminator, 
                          optimizer, 
                          optim_args, 
-                         logger,
-                         out_ch=num_classes,)
+                         logger,)
 
     def _step(self, x, real:bool, **kwargs):
         if len(x) == 0: return torch.empty(0).to(x), torch.empty(0).to(x)
         self.optim.zero_grad()
-        x =  self.forward(x.clone().detach(), kwargs).reshape(-1, 1)
+        x =  self.forward(x.clone().detach(), **kwargs).reshape(-1, 1)
         target = torch.ones_like(x) if real else torch.zeros_like(x)
         loss = binary_cross_entropy(x, target)
         loss.backward()
@@ -46,8 +42,7 @@ class MultiClassDiscriminatorWithOptimizer(DiscriminatorWithOptimizer):
         return losses[:, classes].flatten() if len(losses) > 0 else torch.tensor([])
     
     @property
-    def properties(self): return ['multiclass'] + self.discriminators['1'].properties
-
+    def properties(self): return ['multiclass'] + self.discriminator.properties
 
 class MultiDiscriminatorWithOptimizer(nn.Module):
     def __init__(self, 
