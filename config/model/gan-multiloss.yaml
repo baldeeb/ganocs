@@ -15,24 +15,57 @@ nocs_loss:
   _target_: torch.nn.ModuleDict
   modules:
     'discriminator':
-      _target_: models.discriminators.MultiDiscriminatorWithOptimizer
-      discriminators:
-        _target_: models.discriminators.get_multiple_discriminators
-        disc_type: 
-          _target_: hydra.utils.get_object
-          path: models.discriminators.Discriminator
-        count: 7
-      num_classes: 7 # Number of discriminators to create
+      # _target_: models.discriminators.MultiDiscriminatorWithOptimizer
+      # discriminators:
+      #   _target_: models.discriminators.get_multiple_discriminators
+      #   disc_type: 
+      #     _target_: hydra.utils.get_object
+      #     path: models.discriminators.Discriminator
+      #   count: 7
+      # num_classes: 7 # Number of discriminators to create
+      # logger: 
+      #   _target_: hydra.utils.get_method
+      #   path: wandb.log
+      # optim_args:
+      #   lr: 0.0002
+      #   betas: [0.5, 0.999]
+      #   # weight_decay: 1e-6
+
+      _target_: models.discriminators.MultiClassDiscriminatorWithOptimizer
       logger: 
         _target_: hydra.utils.get_method
         path: wandb.log
+      discriminator:
+        _target_: models.discriminators.Discriminator
+        feat_ch: 128
+        out_ch: 7
+        in_ch: 3
       optim_args:
         lr: 0.0002
         betas: [0.5, 0.999]
         # weight_decay: 1e-6
+
+            
+      # _target_: models.discriminators.MultiClassDiscriminatorWithOptimizer
+      # logger: 
+      #   _target_: hydra.utils.get_method
+      #   path: wandb.log
+      # discriminator:
+      #   _target_: models.discriminators.Discriminator
+      #   feat_ch: 128
+      #   out_ch: 7
+      #   in_ch: 4
+      # optim_args:
+      #   lr: 0.0002
+      #   betas: [0.5, 0.999]
+      #   # weight_decay: 1e-6
+
+
     'mse':
       _target_: torch.nn.MSELoss
       reduction: mean
+
+discriminator_steps_per_batch: 5
 
 loss_weights: 
   # 'discriminator': 0.25
@@ -42,9 +75,9 @@ loss_weights:
     rates: [1.0]
   'discriminator':
     _target_: utils.dummy_rate_setter.DummyRateSetter 
-    # rates: [0.0]
-    rates: [0.0, 0.25, 0.5]
-    inflections: [10000, 50000]
+    # rates: [1.0]
+    rates: [0.5, 1.0]
+    inflections: [20000]
 
 
 # feat_ch: 16

@@ -10,27 +10,39 @@ logger:
 device: cuda:0
 
 optimization:
-  optimizer: 
-    _target_: torch.optim.Adam
-    lr: 0.0002
-    betas: [0.5, 0.99]
-    weight_decay: 1e-6
-  parameters: [roi_heads, rpn, fpn]
-  
-  # multiple: True
-  # optimizers: 
-  #     -
-  #       _target_: torch.optim.Adam
-  #       lr: 0.0002
-  #       betas: [0.5, 0.99]
-  #       weight_decay: 1e-6
-  #     - 
-  #       _target_: torch.optim.Adam
-  #       lr: 0.0002
-  #       betas: [0.5, 0.99]
-  #       weight_decay: 1e-6
+  _target_: utils.optimizers.InitHydraOptimizers
 
-  # parameters:
-  #   - ['backbone', 'fpn', 'rpn', 'roi_heads']
-  #   - ['nocs_head']
-  #   - ['discriminator']
+  # optim_cfgs: 
+  #   - 
+  #     type: 
+  #       _target_: hydra.utils.get_method
+  #       path: torch.optim.Adam
+  #     args:
+  #       lr: 0.0002
+  #       betas: [0.5, 0.99]
+  #       weight_decay: 1e-6
+  # param_cfgs: 
+  #   - [roi_heads, rpn, fpn]
+  
+  optim_cfgs: 
+    -
+      type: 
+        _target_: hydra.utils.get_method
+        path: torch.optim.Adam
+      args:
+        lr: 0.0001
+        betas: [0.9, 0.99]
+        weight_decay: 1e-6
+    -
+      type: 
+        _target_: hydra.utils.get_method
+        path: torch.optim.Adam
+      args:
+        lr: 0.0001
+        betas: [0.5, 0.99]
+        weight_decay: 1e-6
+  param_cfgs:
+    - ['fpn', 'rpn', 
+       'box_roi_pool', 'box_head', 'box_predictor', 
+       'mask_roi_pool', 'mask_head', 'mask_predictor']
+    - ['nocs_head']

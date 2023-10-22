@@ -62,9 +62,7 @@ def run(cfg: DictConfig) -> None:
     else: multiview_loss = lambda: {}
 
     # Optimizer
-    optim_cfg = cfg.optimization
-    parameters = get_model_parameters(model, keys=optim_cfg.parameters)
-    optimizer = hydra.utils.instantiate(optim_cfg.optimizer, params=parameters)
+    optimizer = hydra.utils.instantiate(cfg.optimization, model=model)
 
     # Training
     for epoch in tqdm(range(cfg.num_epochs), desc='Training Epoch Loop'):
