@@ -68,6 +68,43 @@ class DiscriminatorWithOptimizer(nn.Module):
         return ['with_optimizer'] + self.discriminator.properties
     
 
+
+
+
+class DiscriminatorWithWessersteinOptimizer(nn.Module):
+    '''Discriminator model for NOCS images.
+    ref: https://pytorch.org/tutorials/beginner/dcgan_faces_tutorial.html'''
+    def __init__(self, 
+                 discriminator,
+                 optimizer=torch.optim.Adam,
+                 optim_args={'lr':5e-5, 'betas':(0.5, 0.999)},
+                 logger=None, ):
+        super().__init__()
+        self.discriminator = discriminator
+        self.optim = optimizer(self.parameters(), 
+                               **optim_args)
+        if logger is None:
+            self.log = {}
+            self.logger = lambda x: self.log.update(x)
+        else:
+            self.logger = logger
+    
+    def forward(self, x, **kwargs): 
+        return self.discriminator(x, **kwargs)
+
+    def update(self, real_data, fake_data, real_kwargs, fake_kwargs, **kwargs):
+        for _ in range(kwargs.get('discriminator_steps', 1)):
+            self.optim.zero_grad()
+            r =  self.forward(real_data.clone().detach(), **real_kwargs).reshape(-1, 1)
+            f =  self.forward(fake_data.clone().detach(), **fake_kwargs).reshape(-1, 1)
+            loss = r.mean() - f.mean()
+            loss.backward()
+            self.optim.step()
+        self.logger({'discriminator_real_loss': r.mean().item(),
+                    'discriminator_fake_loss': f.mean().item(),
+                    'discriminator_loss': loss.item()})
+        return loss.detach()
+
     @property
     def properties(self): 
         return ['with_optimizer'] + self.discriminator.properties
