@@ -1,5 +1,7 @@
 _target_: models.nocs.get_nocs_resnet50_fpn
 
+num_classes: 7
+
 # pretrained mrcnn weights
 maskrcnn_weights: 
   _target_: hydra.utils.get_object
@@ -13,8 +15,12 @@ nocs_head:
   # layers:
 
 # nocs loss config
-nocs_loss: 
-  _target_: torch.nn.MSELoss
+nocs_loss:
+  _target_: torch.nn.ModuleDict
+  modules:
+    'mse':
+      # _target_: torch.nn.MSELoss
+      _target_: models.losses.symmetry_aware_mse_loss.SymmetryAwareMSELoss
 
 # pretrained nocs weights
 load:  # Set to load checkpoint

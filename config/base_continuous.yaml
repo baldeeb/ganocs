@@ -1,7 +1,0 @@
-defaults:
-  - base
-  - override model: base-continuous
-  - _self_
-
-logger:
-  name:    base-continuous

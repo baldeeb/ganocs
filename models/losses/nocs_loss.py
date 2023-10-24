@@ -10,6 +10,7 @@ from models.discriminators import (DiscriminatorWithOptimizer,
                                   DepthAwareDiscriminator,
                                   RgbdMultiDiscriminatorWithOptimizer)
 from typing import Union, Dict, Callable
+from models.losses.symmetry_aware_mse_loss import SymmetryAwareMSELoss
 
 def project_on_boxes(data, boxes, matched_idxs, M)->torch.Tensor:
     """ Code borrowed from torchvision.models.detection.roi_heads.project_masks_on_boxes
@@ -209,9 +210,9 @@ def nocs_loss(gt_labels,
 
     # Reshape to fit box by performing roi_align
     W = proposals.shape[-1]  # Width of proposal we want gt to match
-    targets = [project_on_boxes(m, p, i, W) 
-        for m, p, i in zip(masked_nocs, box_proposals, matched_ids)]
+    targets = [project_on_boxes(m, p, i, W) for m, p, i in zip(masked_nocs, box_proposals, matched_ids)]
     targets = torch.cat(targets, dim=0) # [B, 3, H, W]
+    
     loss = torch.tensor(0.0).to(device)
     if entropy_loss:
         # If target is empty return 0
@@ -231,26 +232,30 @@ def nocs_loss(gt_labels,
 
     if mse_loss is not None:
         assert proposals.shape[2] == 1, 'Expecting only single bin per color.'
+        mse_kwargs = {}
+        if isinstance(mse_loss, SymmetryAwareMSELoss):
+            mse_kwargs['labels'] = select_with_gt_nocs(torch.cat(labels))
         loss += mse_loss(
                 select_with_gt_nocs(proposals).squeeze(2), 
                 select_with_gt_nocs(targets), 
+                **mse_kwargs,
             ) * loss_weight_fxs['mse']()
 
     if discriminator_loss is not None: 
         disc_kwargs = {
-            'has_gt':   detections_with_gt_nocs,
-            'classes':  torch.cat(labels) if 'multiclass' in discriminator_loss.properties else None,
-            'depth':    None ,
+            'has_gt':     detections_with_gt_nocs,
+            'classes':    torch.cat(labels) if 'multiclass' in discriminator_loss.properties else None,
+            'depth':      None,
             'disc_steps': kwargs.get('discriminator_steps_per_batch', 1)
-            }
+        }
 
         if 'depth_context' in discriminator_loss.properties:
-            masked_depth = [(d.to(device) * m.to(device))[None] for d, m in zip(depth, gt_masks)]
+            masked_depth = [(d[:, None].to(device) * m[None].to(device)) for d, m in zip(depth, gt_masks)]
             target_depths = [project_on_boxes(m, p, i, W) for m, p, i in zip(masked_depth, box_proposals, matched_ids)]
             disc_kwargs['depth'] = torch.cat(target_depths, dim=0) # [B, 1, H, W]
-            # mu = disc_kwargs['depth'].mean((-2, -1))
+            mu = disc_kwargs['depth'].mean((-2, -1))
             # mu = disc_kwargs['depth'].flatten(-2, -1).median(-1).values
-            # disc_kwargs['depth'] = disc_kwargs['depth'] - mu[:, None, None]
+            disc_kwargs['depth'] = disc_kwargs['depth'] - mu[:, None, None]
 
         # # # # # # # # # # # # # # # # # # # # # # # # # # # # # # # # # # # # # # # # 
         # # WHAT IF WE CONCAT MASK -> better inform discriminator

@@ -1,7 +1,6 @@
 defaults:
-  - model: base
+  - model: base-continuous
   - data: original_nocs
-  - optimization: frozen_backbone
   - _self_
 
 log: true                 # Whether to push logs to wandb
@@ -19,12 +18,22 @@ batches_before_save: 100  # Batches before saving a checkpoint
 batches_before_eval: 50   # Batches before evaluating
 num_eval_batches: 5       # Batches to evaluate on
 
-model:
-  num_classes: 7
-  box_score_thresh: 0.7
-  
 hydra:
     run:
         dir: ${checkpoint_dir}
 
 mAP_configs:
+
+optimization:
+  _target_: utils.optimizers.InitHydraOptimizers
+  optim_cfgs: 
+    - 
+      type: 
+        _target_: hydra.utils.get_method
+        path: torch.optim.Adam
+      args:
+        lr: 0.0001
+        weight_decay: 0.0001
+        betas: [0.9, 0.99]
+  param_cfgs: 
+    - [roi_heads, rpn, fpn]
