@@ -18,6 +18,8 @@ from utils.model import get_model_parameters
 def targets2device(targets, device):
     for i in range(len(targets)): 
         for k in ['masks', 'labels', 'boxes']: 
+            if targets[i][k]==None:
+                continue
             targets[i][k] = targets[i][k].to(device)
     return targets
 
@@ -48,7 +50,16 @@ def run(cfg: DictConfig) -> None:
     # Model
     model = hydra.utils.instantiate(cfg.model)
     if cfg.model.load:
-        model.load_state_dict(torch.load(cfg.model.load))
+        sd = torch.load(cfg.model.load.path)
+        strict = cfg.model.load.ignore_keys is None
+        missing, unexpected = model.load_state_dict(sd, strict=strict)
+        missing.extend(unexpected)
+        for k in missing:
+            for i in cfg.model.load.ignore_keys:
+                if i not in k:
+                    raise RuntimeError('While loading got\n'+
+                        f'missing & unexpected  keys: {missing}'+
+                        f'and only ignored: {cfg.model.load.ignore_keys}')
         logging.info(f'Loaded {cfg.model.load}')
     model.to(cfg.device).train()
 

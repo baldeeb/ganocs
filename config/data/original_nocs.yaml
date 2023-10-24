@@ -17,10 +17,11 @@ class_map:
 camera_dir: ./data/original_nocs_data/camera
 real_dir:   ./data/original_nocs_data/real
 coco_dir:   ./data/original_nocs_data/coco
+realsense_dir: ./data/realsense
 
 batch_size: 6
 steps_per_epoch: 1000
-depth_scale: 0.001  # mm to m
+depth_scale: # 0.001  # mm to m
 
 common_configs:
   #################################################################################################################################
@@ -61,9 +62,15 @@ training:
     depth_scale: ${data.depth_scale}
     
   data_info: 
+
+    realsense:
+      depth_scale: 0.2500000118743628
+      dataset_dir: ${data.realsense_dir}
+      weight: 1
+      intrinsics: [[1342.8369140625, 0, 964.1240844726562],[0, 1342.774169921875,536.8278198242188],[0, 0, 1]]
     Real:
       dataset_dir: ${data.real_dir}
-      weight: 3 
+      weight: 1 
       intrinsics: [[591.0125, 0, 322.525], [0, 590.16775, 244.11084], [0, 0, 1]]
       ignore_nocs: False
     CAMERA:
@@ -81,7 +88,7 @@ validation:
   batch_size: ${data.batch_size}
   steps_per_epoch: ${data.steps_per_epoch}
   augment: False
-  shuffle: True
+  shuffle: False
   class_map: ${data.class_map}
 
   collate: 
@@ -100,10 +107,10 @@ validation:
       dataset_dir: ${data.real_dir}
       weight: 1 
       intrinsics: [[591.0125, 0, 322.525], [0, 590.16775, 244.11084], [0, 0, 1]]
-    CAMERA:
-      dataset_dir: ${data.camera_dir}
-      weight: 1
-      intrinsics: [[577.5, 0, 319.5], [0., 577.5, 239.5], [0., 0., 1.]]
+    # CAMERA:
+    #   dataset_dir: ${data.camera_dir}
+    #   weight: 1
+    #   intrinsics: [[577.5, 0, 319.5], [0., 577.5, 239.5], [0., 0., 1.]]
 
 testing:
   _target_: datasets.original_nocs.dataset_wrapper.NOCSDataloader
@@ -126,6 +133,10 @@ testing:
     depth_scale: ${data.depth_scale}
     
   data_info: 
+    # coco:
+    # dataset_dir: ${data.coco_dir}
+    # weight: 1
+    # intrinsics:
     Real:
       dataset_dir: ${data.real_dir}
       weight: 1 
@@ -134,3 +145,8 @@ testing:
     #   dataset_dir: ${data.camera_dir}
     #   weight: 1
     #   intrinsics: [[577.5, 0, 319.5], [0., 577.5, 239.5], [0., 0., 1.]]
+    # realsense:
+    #   depth_scale: 0.2500000118743628
+    #   dataset_dir: ${data.realsense_dir}
+    #   weight: 1
+    #   intrinsics: [[1342.8369140625, 0, 964.1240844726562],[0, 1342.774169921875,536.8278198242188],[0, 0, 1]]

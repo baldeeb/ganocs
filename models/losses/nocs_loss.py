@@ -3,10 +3,11 @@ from torchvision.ops import boxes as _, roi_align
 from torch.nn.functional import (cross_entropy, 
                                  binary_cross_entropy, 
                                  softmax)
-from models.nocs_util import select_labels
+from models.nocs_util import select_labels_in_dict
 from models.discriminator import (DiscriminatorWithOptimizer, 
                                   MultiClassDiscriminatorWithOptimizer, 
                                   ContextAwareDiscriminator)
+from typing import Union
 
 def project_on_boxes(data, boxes, matched_idxs, M)->torch.Tensor:
     """ Code borrowed from torchvision.models.detection.roi_heads.project_masks_on_boxes
@@ -41,36 +42,16 @@ def nocs_preprocessing_for_discriminator(
         raise ValueError(f'Unknown mode {mode}')
     return prediction
 
-def discriminator_as_loss(discriminator:DiscriminatorWithOptimizer, 
+def discriminator_as_loss(discriminator:Union[DiscriminatorWithOptimizer,
+                                              MultiClassDiscriminatorWithOptimizer,
+                                              ContextAwareDiscriminator], 
                           proposals:torch.Tensor, 
                           targets:torch.Tensor,
                           reduction:str='mean',
-                          mode='classification'):
-    '''
-    Args:
-        proposals (Tensor): [B, 3, N, H, W] tensor of predicted nocs
-            where B is batch size, 3 is for x,y,z channels, N is the
-            number of bins, and H, W are the height and width of the
-            image.
-        targets (Tensor): [B, 3, H, W] tensor of indices indicating
-            which of the binary logits is the correct nocs value.'''
-    
-    prediction = nocs_preprocessing_for_discriminator(proposals,
-                                                      mode)
-    # Train discriminator
-    discriminator.update(targets, prediction)
-    
-    # Get nocs loss
-    l = discriminator(prediction)
-    return binary_cross_entropy(l, torch.ones_like(l), reduction=reduction)
-
-    
-def multiclass_discriminator_as_loss(discriminator:DiscriminatorWithOptimizer, 
-                          proposals:torch.Tensor, 
-                          targets:torch.Tensor,
-                          classes:torch.Tensor,
-                          reduction:str='mean',
-                          mode='classification'):
+                          mode='classification',
+                          has_gt=None,
+                          classes:torch.Tensor=None,
+                          depth:torch.Tensor=None,):
     '''
     Args:
         proposals (Tensor): [B, 3, N, H, W] tensor of predicted nocs
@@ -79,67 +60,78 @@ def multiclass_discriminator_as_loss(discriminator:DiscriminatorWithOptimizer,
             image.
         targets (Tensor): [B, 3, H, W] tensor of indices indicating
             which of the binary logits is the correct nocs value.
-        classes (Tensor): [B] is a list of the class ids associated 
-            with the B targets.'''
-    
-    prediction = nocs_preprocessing_for_discriminator(proposals,
-                                                      mode)
-    # Train discriminator
-    discriminator.update(targets, prediction, classes)
-    
-    # Get nocs loss
-    l = discriminator(prediction, classes)
-    return binary_cross_entropy(l, torch.ones_like(l), reduction=reduction)
-
-    
-def contextualized_discriminator_as_loss(discriminator:DiscriminatorWithOptimizer, 
-                          proposals:torch.Tensor, 
-                          targets:torch.Tensor,
-                          classes:torch.Tensor,
-                          depth:torch.Tensor,
-                          reduction:str='mean',
-                          mode='classification',):
+        classes (Tensor): [B] constains the class of the sample. Used
+            when using a different discriminator for each class.
     '''
-    Args:
-        proposals (Tensor): [B, 3, N, H, W] tensor of predicted nocs
-            where B is batch size, 3 is for x,y,z channels, N is the
-            number of bins, and H, W are the height and width of the
-            image.
-        targets (Tensor): [B, 3, H, W] tensor of indices indicating
-            which of the binary logits is the correct nocs value.
-        classes (Tensor): [B] is a list of the class ids associated 
-            with the B targets.'''
-    
+
     prediction = nocs_preprocessing_for_discriminator(proposals,
                                                       mode)
-
-    context = None # TODO: encode classes, depth
-
-    # Train discriminator
-    discriminator.update(targets, prediction, context)
+    selected_targets = targets
+    update_kwargs, forward_kwargs = {}, {}
     
+    if classes is not None:
+        # For multihead discriminator, specify head
+        update_kwargs['real_classes'] = classes
+        update_kwargs['fake_classes'] = classes
+        forward_kwargs['class_id'] = classes 
+
+    # For contextual discriminator
+    if depth is not None:
+        raise NotImplementedError('contextual discriminator is \
+                                  not yet implemented.')
+        # ctxt = function of depth
+        update_kwargs['context'] = ctxt
+        forward_kwargs['context'] = ctxt 
+        
+    if has_gt is not None:
+        # select targets with gt nocs to train discriminator.
+        selected_targets = targets[has_gt]
+        if classes is not None:
+            update_kwargs['real_classes'] = classes[has_gt]
+    
+    # Train discriminator
+    discriminator.update(real=selected_targets, 
+                         fake=prediction, 
+                         **update_kwargs)
     # Get nocs loss
-    l = discriminator(prediction, context)
-    return binary_cross_entropy(l, torch.ones_like(l), reduction=reduction)
+    l = discriminator(x=prediction, 
+                      **forward_kwargs)
+    return binary_cross_entropy(l, torch.ones_like(l), 
+                                reduction=reduction)
+
+
+def get_list_samples_with_gt_nocs(x, nocs_gt_available):
+    return [vi for vi, s in zip(x, nocs_gt_available) if s]
+
+def get_indices_of_detections_with_gt_nocs(nocs_gt_available, matched_idxs,gt_labels):
+    if matched_idxs==None:
+        return None
+    len_s = [len(v) for v in matched_idxs]
+    zs, os = lambda a: torch.zeros(a, dtype=torch.bool), lambda a: torch.ones(a, dtype=torch.bool)
+    return torch.cat([os(l) if i else zs(l) for i, l in zip(nocs_gt_available, len_s)])
+
+def get_dict_samples_with_gt_nocs(x, detections_with_gt_nocs):
+    return {k:v[detections_with_gt_nocs] for (k, v) in x.items()}
 
 
 def nocs_loss(gt_labels, 
               gt_nocs,
               gt_masks,
               nocs_proposals, 
-              proposed_box_regions, 
+              box_proposals, 
               matched_ids, 
               reduction='mean',
               loss_fx=cross_entropy,
-              mode='classification', # regression or classification
+              nocs_loss_mode='classification', # regression or classification
               dispersion_loss=None,
               dispersion_weight=0.0,
               depth=None,
-              **_):
+              samples_with_valid_targets=None,
+              **kwargs):
     '''
     Calculates nocs loss. Supports cross_entropy and discriminator loss.
     Args: 
-         gt_labels (List[long]): the labels existant in each image 
+        gt_labels (List[long]): the labels existant in each image 
             in the batch. The length of this list is the batch size.
         gt_nocs [B, 3, H, W] (float): ground truth nocs with
             values in [0, 1]
@@ -155,32 +147,71 @@ def nocs_loss(gt_labels,
             reductions.
         dispersion_loss (Callable): A function that takes the nocs proposals
             and returns a scalar loss per batch.
+        samples_with_valid_targets (list[bool]): A list of booleans indicating,
+            for each image in the batch, whether or not it has sufficient 
+            information to superervise nocs. When useing l2 loss this means
+            having gt nocs. If None, it will be calculated from the gt_nocs.
+
     Returns 
         loss (Tensor): An element or list of values depending on the reduction
     
     NOTE: Symmetry loss is not implemented
     '''
-    # Select the label for each proposal
-    labels = [gt_label[idxs] for gt_label, idxs 
-              in zip(gt_labels, matched_ids)]
-    proposals = select_labels(nocs_proposals, labels)  # Dict (3 values) [T, N, H, W] 
-    proposals = torch.stack(tuple(proposals.values()), dim=1) # [T, 3, N, H, W] 
-    
-    masked_nocs = [n[:, None] * m[None].to(n) for n, m in zip(gt_nocs, gt_masks)]
 
+    # Find samples with gt nocs
+    # if unlabelled_imgs:
+    #     detections_with_gt_nocs=None
+    #     labels=gt_labels
+    #     # labels = [gt_label[idxs] for gt_label, idxs in zip(gt_labels, matched_ids)]
+    #     proposals = select_labels_in_dict(nocs_proposals, labels)  # Dict (3 values) [T, N, H, W] 
+    #     proposals = torch.stack(tuple(proposals.values()), dim=1) # [T, 3, N, H, W] 
+    #     targets=[]
+
+    # else:
+    if samples_with_valid_targets is None:
+        samples_with_valid_targets = [g.sum().item() > 0 for g in gt_nocs]
+    
+    detections_with_gt_nocs = get_indices_of_detections_with_gt_nocs(
+                                                        samples_with_valid_targets,
+                                                        matched_ids,gt_labels)
+    #if loss_fx == cross_entropy or not kwargs.get('use_unlabeled_nocs', False):
+    if loss_fx == cross_entropy:
+        # Only keep samples with valid targets
+        gt_labels = get_list_samples_with_gt_nocs(gt_labels, samples_with_valid_targets)
+        gt_nocs = get_list_samples_with_gt_nocs(gt_nocs, samples_with_valid_targets)
+        gt_masks = get_list_samples_with_gt_nocs(gt_masks, samples_with_valid_targets)
+        nocs_proposals = get_dict_samples_with_gt_nocs(nocs_proposals, detections_with_gt_nocs)
+        box_proposals = get_list_samples_with_gt_nocs(box_proposals, samples_with_valid_targets)
+        matched_ids = get_list_samples_with_gt_nocs(matched_ids, samples_with_valid_targets)
+        depth = get_list_samples_with_gt_nocs(depth, samples_with_valid_targets)
+        detections_with_gt_nocs = [1] * len(gt_labels)
+
+    # Select the label for each proposal
+    if matched_ids:
+        labels = [gt_label[idxs] if idxs!=None else gt_label for gt_label, idxs in zip(gt_labels, matched_ids)]
+    else:
+        labels=gt_labels
+    proposals = select_labels_in_dict(nocs_proposals, labels)  # Dict (3 values) [T, N, H, W] 
+    proposals = torch.stack(tuple(proposals.values()), dim=1) # [T, 3, N, H, W] 
+   
 
     # Reshape to fit box by performing roi_align
     W = proposals.shape[-1]  # Width of proposal we want gt to match
-    targets = [project_on_boxes(m, p, i, W) 
-        for m, p, i in zip(masked_nocs, proposed_box_regions, matched_ids)]
-    targets = torch.cat(targets, dim=0) # [B, 3, H, W]
 
-    # If target is empty return 0
-    if targets.numel() == 0: return proposals.sum() * 0
+    if gt_nocs:
+        masked_nocs = [n[:, None] * m[None].to(n) for n, m in zip(gt_nocs, gt_masks)]
+        targets = [project_on_boxes(m, p, i, W) 
+            for m, p, i in zip(masked_nocs, box_proposals, matched_ids)]
+        targets = torch.cat(targets, dim=0) # [B, 3, H, W]
+    else:
+        targets=torch.empty()
 
     if loss_fx == cross_entropy:
-        assert mode == 'classification', 'Cross entropy only supports classification'
-        targets_idxs = (targets * (proposals.shape[2] - 1)).round().long()  # (0->1) to indices [0, 1, ...]
+        # If target is empty return 0
+        if targets.numel() == 0: return proposals.sum() * 0
+        assert nocs_loss_mode == 'classification', 'Cross entropy only supports classification'
+        targets_discretized = (targets * (proposals.shape[2] - 1)).round().long()  # (0->1) to indices [0, 1, ...]
+
         # Temperature to limit the proposal probabilities.
         if False:
             thresh = 1e4
@@ -188,36 +219,36 @@ def nocs_loss(gt_labels,
             tau = min([thresh/abs(pmin), thresh/pmax, 1.0])
             proposals = proposals * tau # multiply by temperature
             # assert not proposals.isnan().any(), 'Proposals are NAN after temperature.'
+
         loss = cross_entropy(proposals.transpose(1,2), 
-                             targets_idxs,
+                             targets_discretized,
                              reduction=reduction)
     
-    # TODO: make base class for all to inherit.
-    elif isinstance(loss_fx, DiscriminatorWithOptimizer):
+    elif isinstance(loss_fx, torch.nn.MSELoss):
+        assert proposals.shape[2] == 1, 'Expecting only single bin per color.'
+        loss = loss_fx(proposals.squeeze(2), targets)
+
+    elif isinstance(loss_fx, (DiscriminatorWithOptimizer, 
+                              MultiClassDiscriminatorWithOptimizer,
+                              ContextAwareDiscriminator)):
+        disc_kwargs = {
+            'has_gt':   detections_with_gt_nocs,
+            'classes':  torch.cat(labels) \
+                        if isinstance(loss_fx, MultiClassDiscriminatorWithOptimizer) \
+                        else None,
+            'depth':    depth 
+                        if isinstance(loss_fx, ContextAwareDiscriminator) \
+                        else None
+        }
         loss = discriminator_as_loss(loss_fx, 
                                      proposals, 
                                      targets,
                                      reduction=reduction,
-                                     mode=mode)
-    elif isinstance(loss_fx, MultiClassDiscriminatorWithOptimizer):
-        loss = multiclass_discriminator_as_loss(loss_fx, 
-                                                proposals, 
-                                                targets, 
-                                                labels,
-                                                reduction=reduction,
-                                                mode=mode)
-    elif isinstance(loss_fx, ContextAwareDiscriminator):
-        depth_crop = [project_on_boxes(m, p, i, W) 
-            for m, p, i in zip(depth, proposed_box_regions, matched_ids)]
-        loss = contextualized_discriminator_as_loss(loss_fx, 
-                                                proposals, 
-                                                targets, 
-                                                labels,
-                                                reduction=reduction,
-                                                mode=mode,
-                                                depth=depth_crop)
-
+                                     mode=nocs_loss_mode,
+                                     **disc_kwargs
+                                    )
     if dispersion_loss is not None:
+        # Motivates the distribution of the proposal to be similar to that of target
         loss += dispersion_loss(proposals, targets) * dispersion_weight
 
     return loss

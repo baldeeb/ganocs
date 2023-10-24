@@ -1,8 +1,11 @@
 from torch import cat, arange, Tensor, stack
-def select_labels(nocs_dict, 
+def select_labels_in_dict(nocs_dict, 
                   labels):
     '''
-    Assumes labels are 1-indexes of the nocs_dict.
+    Every element of the dict predicts a nocs map for every label possible.
+    This function selects the nocs map that corresponds to the label predicted
+        to be correct.
+    Assumes labels are 1-indexes of the nocs_dict; lable 0 is for background.
     Args:
         data (torch.Tensor): of shape [B, L, ...] where B
             is the batch size L is the labels one of which
@@ -74,7 +77,7 @@ def select_nocs_proposals(nocs_proposals, labels, num_classes):
     # Select the predicted labels
     for i, l in enumerate(labels):
         labels[i][l>num_classes] = 0
-    nocs_proposals = select_labels(nocs_proposals, 
+    nocs_proposals = select_labels_in_dict(nocs_proposals, 
                                     labels)
     # Split batch to batches
     nocs_proposals = separate_image_results(nocs_proposals, 

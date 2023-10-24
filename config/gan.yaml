@@ -1,6 +1,6 @@
 defaults:
   - base
-  - override model:        gan
+  - override model:  gan
   - _self_
 
 log:    True
@@ -10,11 +10,15 @@ logger:
 device:              cuda:1
 
 model:
-  nocs_loss:
-    num_classes: 7  # number of discriminators to use
+  use_unlabeled_nocs: True  # When set to true, images with no nocs will train the generator
+
+  load: 
+    path: checkpoints/gan-nocs/base-continuous/2023-09-21_11-00-56/0104_000000.pth
+    ignore_keys: ['discriminator']
 
 optimization:
   optimizer: 
+    _target_: torch.optim.Adam
     lr: 0.0001
-    weight_decay: 1e-6
-
+    betas: [0.5, 0.99]
+    # weight_decay: 1e-6

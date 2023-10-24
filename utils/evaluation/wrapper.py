@@ -98,7 +98,32 @@ def eval(model, dataloader, device, mAP_configs=None, num_batches=None, log:call
                 log_results = { # MRCNN
                     'pred_segmentation': wandb.Image(seged_img),
                     'pred_boxes':        wandb.Image(boxes_img),
-                }                    
+                }   
+                _to_ndarray = lambda a : a.clone().detach().cpu().numpy() \
+                                            if isinstance(a, torch.Tensor) else a    
+                pred_Rt, pred_s = [], []             
+                for mask, nocs in zip(_to_ndarray(pred_bin_masks), 
+                                    _to_ndarray(result['nocs'])):
+                    Rt, s, _ = align(mask, nocs, 
+                                    _to_ndarray(target['depth']), 
+                                    _to_ndarray(target['intrinsics']))
+                    pred_Rt.append(Rt), pred_s.append(s)
+                result["pred_Rt"]=pred_Rt
+                result["scales"]=pred_s
+
+                if dataloader._sources==["realsense"]:
+                    pred_bboxes_image = draw_boxes(image, 
+                                                   _to_ndarray(pred_Rt), 
+                                                   _to_ndarray(pred_s), 
+                                                   _to_ndarray(target['intrinsics']),)
+                    cumm_nocs = merge_nocs_to_single_image(result['nocs'], pred_bin_masks, )
+                    log_results.update({
+                        'pred_bboxes':       wandb.Image(pred_bboxes_image),
+                        'pred_nocs':         wandb.Image(cumm_nocs),
+                    })
+                    log(log_results)
+                    continue
+
 
                 if callable(getattr(model.roi_heads, "has_nocs", None)) and \
                     model.roi_heads.has_nocs():
@@ -108,8 +133,8 @@ def eval(model, dataloader, device, mAP_configs=None, num_batches=None, log:call
                     
                     # align
                     # TODO: Move to the GPU driven align function implemented by BYOC
-                    _to_ndarray = lambda a : a.clone().detach().cpu().numpy() \
-                                            if isinstance(a, torch.Tensor) else a
+                    # _to_ndarray = lambda a : a.clone().detach().cpu().numpy() \
+                    #                         if isinstance(a, torch.Tensor) else a
                     pred_Rt, pred_s = [], []
                     for mask, nocs in zip(_to_ndarray(pred_bin_masks), 
                                         _to_ndarray(result['nocs'])):
@@ -178,7 +203,9 @@ def eval(model, dataloader, device, mAP_configs=None, num_batches=None, log:call
             #     log_results.extend(map_calculator.get_mAP_dict())               
             #     log(log_results)
 
-        if mAP_configs:               
+        if mAP_configs:
+            map_calculator.get_mAP_dict()
+            map_calculator.plot_map_curves(log)             
             log(map_calculator.get_mAP_dict(summary=True))
 
 
