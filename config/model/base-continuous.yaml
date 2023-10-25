@@ -9,18 +9,22 @@ maskrcnn_weights:
 
 # nocs head config
 nocs_head:
-  num_bins: 1
-  mode: regression
+  num_bins: 32
+  mode: classification
   head_per_channel: True
   # layers:
 
 # nocs loss config
 nocs_loss:
   _target_: torch.nn.ModuleDict
+  # modules:
+  #   'mse':
+  #     # _target_: torch.nn.MSELoss
+  #     _target_: models.losses.symmetry_aware_loss.SymmetryAwareLoss
   modules:
-    'mse':
+    'cross_entropy':
       # _target_: torch.nn.MSELoss
-      _target_: models.losses.symmetry_aware_mse_loss.SymmetryAwareMSELoss
+      _target_: models.losses.symmetry_aware_loss.SymmetryAwareLoss
 
 # pretrained nocs weights
 load:  # Set to load checkpoint
