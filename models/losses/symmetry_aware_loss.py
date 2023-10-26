@@ -19,11 +19,9 @@ def symmetry_aware_loss(pred_nocs, gt_nocs, **kwargs):
     for p, g, T in zip(pred_nocs, gt_nocs, sym_T):
         m = torch.zeros_like(g); m[g > 1e-6] = 1.0
         gs = (torch.einsum('ijj,jkl->ijkl', T.to(g), (g - 0.5)) + 0.5)*m
-        #gs=torch.unsqueeze(g,0)
         if kwargs['loss_type']=='mse':
             deltas.append((p[None] - gs.detach()).view(len(gs), -1).square().mean(-1).min())
         elif kwargs['loss_type']=='cross_entropy':
-            #p=torch.unsqueeze(p,0)
             p_broadcasted = p.unsqueeze(0).repeat(gs.size(0), 1, 1, 1, 1)
             gs_discretized = (gs * (p_broadcasted.shape[2] - 1)).round().long()  # (0->1) to indices [0, 1, ...]
             loss = F.cross_entropy(p_broadcasted.transpose(1,2), gs_discretized, reduction=kwargs['reduction']).min()

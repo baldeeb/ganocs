@@ -11,8 +11,12 @@ maskrcnn_weights:
 load:  # Set to load checkpoint
 
 # nocs loss config
-nocs_loss: 
-  _target_: torch.nn.CrossEntropyLoss
+nocs_loss:
+  #_target_: torch.nn.CrossEntropyLoss
+  _target_: torch.nn.ModuleDict
+  modules:
+    'cross_entropy':
+      _target_: models.losses.symmetry_aware_loss.SymmetryAwareLoss
 
 # nocs head config
 nocs_head:
