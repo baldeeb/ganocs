@@ -7,7 +7,7 @@ log: true                 # Whether to push logs to wandb
 logger:
   project: gan-nocs
   entity:  rpm-collab
-  name:    train_new_main
+  name:    train_original_symmetry
 
 device: cuda:0
 checkpoint_dir: ./checkpoints/${logger.project}/${logger.name}/${now:%Y-%m-%d_%H-%M-%S}
