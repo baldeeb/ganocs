@@ -98,17 +98,12 @@ def discriminator_as_loss(discriminator:Union[DiscriminatorWithOptimizer,
     
     # Train discriminator
     for _ in range(disc_steps):
-        # discriminator.update_real(selected_targets, **update_real_kwargs)
-        # discriminator.update_fake(prediction,       **update_fake_kwargs)
         discriminator.update(real_data=selected_targets,
                             fake_data=prediction,
                             real_kwargs=update_real_kwargs,
                             fake_kwargs=update_fake_kwargs)
     # Get nocs loss
-    l = discriminator(x=prediction, 
-                      **forward_kwargs)
-    return binary_cross_entropy(l, torch.ones_like(l), 
-                                reduction=reduction)
+    return discriminator.critique(x=prediction, **forward_kwargs)
 
 
 def get_list_samples_with_gt_nocs(x, nocs_gt_available):
@@ -134,12 +129,12 @@ def get_loss_objectives(loss_fx):
         mse_loss = loss_fx
     else: 
         discriminator_loss = loss_fx
-    if discriminator_loss is not None:
-        assert isinstance(discriminator_loss, 
-                            (DiscriminatorWithOptimizer, 
-                            MultiDiscriminatorWithOptimizer,
-                            MultiClassDiscriminatorWithOptimizer,
-                            DepthAwareDiscriminator))
+    # if discriminator_loss is not None:
+    #     assert isinstance(discriminator_loss, 
+    #                         (DiscriminatorWithOptimizer, 
+    #                         MultiDiscriminatorWithOptimizer,
+    #                         MultiClassDiscriminatorWithOptimizer,
+    #                         DepthAwareDiscriminator))
     return cross_entropy_loss, mse_loss, discriminator_loss
 
 def get_loss_weights(loss_weights, default=lambda:1.0):
@@ -260,21 +255,27 @@ def nocs_loss(gt_labels,
             'disc_steps': kwargs.get('discriminator_steps_per_batch', 1)
         }
 
-        if 'depth_context' in discriminator_loss.properties:
+        masks = torch.cat([project_on_boxes(m[None].to(p), p, i, W) 
+                            for m, p, i in zip(gt_masks, box_proposals, matched_ids)])
+
+        if True:  # 'depth_context' in discriminator_loss.properties:
             masked_depth = [(d[:, None].to(device) * m[None].to(device)) for d, m in zip(depth, gt_masks)]
             target_depths = [project_on_boxes(m, p, i, W) for m, p, i in zip(masked_depth, box_proposals, matched_ids)]
-            disc_kwargs['depth'] = torch.cat(target_depths, dim=0) # [B, 1, H, W]
-            mu = disc_kwargs['depth'].mean((-2, -1))
-            # mu = disc_kwargs['depth'].flatten(-2, -1).median(-1).values
-            disc_kwargs['depth'] = disc_kwargs['depth'] - mu[:, None, None]
-
-        # # # # # # # # # # # # # # # # # # # # # # # # # # # # # # # # # # # # # # # # 
-        # # WHAT IF WE CONCAT MASK -> better inform discriminator
-        # masks = torch.cat([project_on_boxes(m[None].to(p), p, i, W) 
-        #                     for m, p, i in zip(gt_masks, box_proposals, matched_ids)])
+            target_depths = torch.cat(target_depths, dim=0) # [B, 1, H, W]
+            
+            mu = torch.stack([(d + ((1-m)*9999)).min() for d, m in zip(target_depths, masks)])  # min normalize
+            # mu = disc_kwargs['depth'].mean((-2, -1))                                          # mean normalize
+            # mu = disc_kwargs['depth'].flatten(-2, -1).median(-1).values                       # median normalize
+            disc_kwargs['depth'] = target_depths - (masks * mu[:, None, None, None])
+            
+        # # # # # # # # # # # # # # # # # # # # # # # # # # # # # # # # # # # # # # # # # 
+        # # WHAT IF WE CONCAT MASK AND DEPTH -> better inform discriminator
+        # proposals = torch.cat([proposals, masks[:, :, None], disc_kwargs['depth'][:, :, None]], dim=1)
+        # targets = torch.cat([targets, masks, disc_kwargs['depth']], dim=1)
         # proposals = torch.cat([proposals, masks[:, :, None]], dim=1)
         # targets = torch.cat([targets, masks], dim=1)
-        # # # # # # # # # # # # # # # # # # # # # # # # # # # # # # # # # # # # # # # # 
+        # # # # # # # # # # # # # # # # # # # # # # # # # # # # # # # # # # # # # # # # # 
+
 
         loss += discriminator_as_loss(discriminator_loss, 
                                      proposals, 
