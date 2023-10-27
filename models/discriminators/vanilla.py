@@ -3,11 +3,11 @@ from torch import nn
 class Discriminator(nn.Module):
     '''Discriminator model for NOCS images.
     ref: https://pytorch.org/tutorials/beginner/dcgan_faces_tutorial.html'''
-    def __init__(self, in_ch=3, feat_ch=64, out_ch=1):
+    def __init__(self, in_ch=3, feat_ch=64, out_ch=1, sigmoid=True):
         super().__init__()
 
         # a 4x4 kernel model. closer to DCGAN.
-        self.model = nn.Sequential(
+        layers = [
             nn.Conv2d(in_ch, feat_ch, 3, 2, 1, bias=False),  # 28 -> 14
             nn.BatchNorm2d(feat_ch),
             nn.LeakyReLU(0.2, inplace=True),
@@ -41,8 +41,10 @@ class Discriminator(nn.Module):
             # nn.LeakyReLU(0.2, inplace=True),
             
             # nn.Conv2d(8*feat_ch, out_ch, 1, 1, 0, bias=False), # 1 -> 1
-            nn.Sigmoid()
-        )
+        ]
+        if sigmoid: 
+            layers.append(nn.Sigmoid())
+        self.model = nn.Sequential(*layers)
         self._init_weights()
 
     def _init_weights(self):
