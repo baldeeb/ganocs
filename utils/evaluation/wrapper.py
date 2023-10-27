@@ -63,7 +63,7 @@ def draw_boxes(image, Rts, Ss, intrinsic):
 
 def eval(model, dataloader, device, mAP_configs=None, num_batches=None, log:callable=wandb.log):
 
-    gif = None  #  GifAccumulator('./temp/eval.gif')
+    gif = GifAccumulator('./temp/eval.gif')
     IoU_list = []
     l2_loss_list = []
 
