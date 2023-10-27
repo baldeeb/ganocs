@@ -45,13 +45,14 @@ class DiscriminatorWithOptimizer(nn.Module):
         self._log(loss, val, real=real)
         return loss
     
-    def update_real(self, data, **kwargs): return self._update(data, True,  **kwargs)
-    def update_fake(self, data, **kwargs): return self._update(data, False, **kwargs)
+    def update_real(self, data, **kwargs): 
+        return self._update(data, True,  **kwargs)
+    def update_fake(self, data, **kwargs): 
+        return self._update(data, False, **kwargs)
     
-    def update(self, real_data, fake_data, real_kwargs, fake_kwargs, **kwargs):
-        for _ in range(kwargs.get('discriminator_steps', 1)):
-            r = self.update_real(real_data.clone().detach(), **real_kwargs)
-            f = self.update_fake(fake_data.clone().detach(), **fake_kwargs)
+    def update(self, real_data, fake_data, real_kwargs, fake_kwargs):
+        r = self.update_real(real_data.clone().detach(), **real_kwargs)
+        f = self.update_fake(fake_data.clone().detach(), **fake_kwargs)
         return (r + f) / 2
 
     def _loss(self, real, fake):
@@ -62,48 +63,49 @@ class DiscriminatorWithOptimizer(nn.Module):
         fake_loss = binary_cross_entropy(f, torch.zeros_like(f))
         self._log(fake_loss, f, False)
         return real_loss + fake_loss
+    
+    def critique(self, x, reduction='mean', **kwargs):
+        l = self.forward(x, **kwargs)
+        return binary_cross_entropy(l, torch.ones_like(l), 
+                                    reduction=reduction)
 
     @property
     def properties(self): 
         return ['with_optimizer'] + self.discriminator.properties
     
 
-
-
-
 class DiscriminatorWithWessersteinOptimizer(nn.Module):
     '''Discriminator model for NOCS images.
     ref: https://pytorch.org/tutorials/beginner/dcgan_faces_tutorial.html'''
     def __init__(self, 
                  discriminator,
-                 optimizer=torch.optim.Adam,
-                 optim_args={'lr':5e-5, 'betas':(0.5, 0.999)},
-                 logger=None, ):
+                 optimizer=torch.optim.RMSprop,
+                 optim_args={'lr':5e-5, 'alpha':0.99, 'eps':1e-8},
+                 logger=lambda _: None,
+                ):
         super().__init__()
         self.discriminator = discriminator
-        self.optim = optimizer(self.parameters(), 
-                               **optim_args)
-        if logger is None:
-            self.log = {}
-            self.logger = lambda x: self.log.update(x)
-        else:
-            self.logger = logger
+        self.optim = optimizer(self.parameters(), **optim_args)
+        self.logger = logger
     
     def forward(self, x, **kwargs): 
         return self.discriminator(x, **kwargs)
 
     def update(self, real_data, fake_data, real_kwargs, fake_kwargs, **kwargs):
-        for _ in range(kwargs.get('discriminator_steps', 1)):
-            self.optim.zero_grad()
-            r =  self.forward(real_data.clone().detach(), **real_kwargs).reshape(-1, 1)
-            f =  self.forward(fake_data.clone().detach(), **fake_kwargs).reshape(-1, 1)
-            loss = r.mean() - f.mean()
-            loss.backward()
-            self.optim.step()
+        self.optim.zero_grad()
+        
+        r =  self.forward(real_data.clone().detach(), **real_kwargs).reshape(-1, 1)
+        f =  self.forward(fake_data.clone().detach(), **fake_kwargs).reshape(-1, 1)
+        loss = r.mean() - f.mean()
+        loss.backward()
+        self.optim.step()
         self.logger({'discriminator_real_loss': r.mean().item(),
                     'discriminator_fake_loss': f.mean().item(),
                     'discriminator_loss': loss.item()})
         return loss.detach()
+
+    def critique(self, x, **kwargs):
+        return self.forward(x, **kwargs).mean()
 
     @property
     def properties(self): 
