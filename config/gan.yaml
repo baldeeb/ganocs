@@ -10,20 +10,7 @@ logger:
 device: cuda:0
 
 optimization:
-  _target_: utils.optimizers.InitHydraOptimizers
-
-  # optim_cfgs: 
-  #   - 
-  #     type: 
-  #       _target_: hydra.utils.get_method
-  #       path: torch.optim.Adam
-  #     args:
-  #       lr: 0.0002
-  #       betas: [0.5, 0.99]
-  #       weight_decay: 1e-6
-  # param_cfgs: 
-  #   - [roi_heads, rpn, fpn]
-  
+  _target_: utils.optimizers.InitHydraOptimizers  
   optim_cfgs: 
     -
       type: 

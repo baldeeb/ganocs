@@ -8,7 +8,7 @@ maskrcnn_weights:
   path: torchvision.models.detection.mask_rcnn.MaskRCNN_ResNet50_FPN_Weights.DEFAULT
 
 # nocs head config
-nocs_head:
+nocs_head_params:
   num_bins: 1
   mode: regression
   head_per_channel: True

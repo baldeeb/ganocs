@@ -376,7 +376,7 @@ class RoIHeadsWithNocs(RoIHeads):
     def from_torchvision_roiheads(heads:RoIHeads, 
                                   **kwargs):
         '''Returns RoIHeadsWithNocs given an RoIHeads instance.'''
-        head_kwargs = kwargs['nocs_head'] if 'nocs_head' in kwargs else {}
+        head_kwargs = kwargs['nocs_head_params'] if 'nocs_head_params' in kwargs else {}
         head_kwargs['in_channels'] = heads.mask_head[0][0].in_channels
         head_kwargs['num_classes'] = heads.mask_predictor.mask_fcn_logits.out_channels
         nocs_heads = NocsHeads(**head_kwargs)

@@ -1,5 +1,5 @@
 defaults:
-  - model: base-continuous
+  - model: base
   - data: original_nocs
   - _self_
 
