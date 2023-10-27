@@ -33,19 +33,58 @@ nocs_loss:
       #   betas: [0.5, 0.999]
       #   # weight_decay: 1e-6
 
-      _target_: models.discriminators.MultiClassDiscriminatorWithOptimizer
+
+      # _target_: models.discriminators.MultiClassDiscriminatorWithOptimizer
+      # logger: 
+      #   _target_: hydra.utils.get_method
+      #   path: wandb.log
+      # discriminator:
+      #   _target_: models.discriminators.Discriminator
+      #   feat_ch: 128
+      #   out_ch: ${model.num_classes}
+      #   in_ch: 3
+      # optim_args:
+      #   lr: 0.0001
+      #   betas: [0.5, 0.999]
+
+
+      # # Wesserstien loss
+      # _target_: models.discriminators.MultiClassDiscriminatorWithWessersteinOptimizer 
+      # logger: 
+      #   _target_: hydra.utils.get_method
+      #   path: wandb.log
+      # discriminator:
+      #   _target_: models.discriminators.Discriminator
+      #   feat_ch: 128
+      #   out_ch: ${model.num_classes}
+      #   in_ch: 3
+      #   sigmoid: false
+      # optim_args:
+      #   lr: 0.0001
+      # #   betas: [0.5, 0.999]
+
+
+
+      # Multi disc - Wesserstien loss
+      _target_: models.discriminators.MultiDiscriminatorWithWessersteinOptimizer
+      num_classes: ${model.num_classes}
       logger: 
         _target_: hydra.utils.get_method
         path: wandb.log
-      discriminator:
-        _target_: models.discriminators.Discriminator
-        feat_ch: 128
-        out_ch: 7
+      discriminators:
+        _target_: models.discriminators.get_multiple_discriminators
+        disc_type: 
+          _target_: hydra.utils.get_object
+          path: models.discriminators.Discriminator
+        count: ${model.num_classes}
+        feat_ch: 32
+        out_ch: 1
         in_ch: 3
-      optim_args:
-        lr: 0.0002
-        betas: [0.5, 0.999]
-        # weight_decay: 1e-6
+        sigmoid: false
+      #   betas: [0.5, 0.999]
+
+
+
 
             
       # _target_: models.discriminators.MultiClassDiscriminatorWithOptimizer
@@ -70,16 +109,14 @@ nocs_loss:
 discriminator_steps_per_batch: 5
 
 loss_weights: 
-  # 'discriminator': 0.25
-  # 'mse': 1.0
   'mse':
     _target_: utils.dummy_rate_setter.DummyRateSetter
     rates: [1.0]
   'discriminator':
     _target_: utils.dummy_rate_setter.DummyRateSetter 
     # rates: [1.0]
-    rates: [0.5, 1.0]
-    inflections: [20000]
+    rates: [0.25, 1.0]
+    inflections: [5000]
 
 
 # feat_ch: 16
