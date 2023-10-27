@@ -20,7 +20,7 @@ nocs_loss:
   modules:
     'mse':
       # _target_: torch.nn.MSELoss
-      _target_: models.losses.symmetry_aware_mse_loss.SymmetryAwareMSELoss
+      _target_: models.losses.symmetry_aware_loss.SymmetryAwareLoss
 
 # pretrained nocs weights
 load:  # Set to load checkpoint

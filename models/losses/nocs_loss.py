@@ -10,7 +10,7 @@ from models.discriminators import (DiscriminatorWithOptimizer,
                                   DepthAwareDiscriminator,
                                   RgbdMultiDiscriminatorWithOptimizer)
 from typing import Union, Dict, Callable
-from models.losses.symmetry_aware_mse_loss import SymmetryAwareMSELoss
+from models.losses.symmetry_aware_loss import SymmetryAwareLoss
 
 def project_on_boxes(data, boxes, matched_idxs, M)->torch.Tensor:
     """ Code borrowed from torchvision.models.detection.roi_heads.project_masks_on_boxes
@@ -218,27 +218,38 @@ def nocs_loss(gt_labels,
         # If target is empty return 0
         if targets.numel() == 0: return proposals.sum() * 0
         assert nocs_loss_mode == 'classification', 'Cross entropy only supports classification'
-        targets_discretized = (targets * (proposals.shape[2] - 1)).round().long()  # (0->1) to indices [0, 1, ...]
+        loss_kwargs = {}
+        if isinstance(entropy_loss, SymmetryAwareLoss):
+            loss_kwargs['labels'] = select_with_gt_nocs(torch.cat(labels))
+            loss_kwargs['reduction']=reduction
+            loss_kwargs['loss_type']='cross_entropy'
+            loss += entropy_loss(select_with_gt_nocs(proposals), 
+                        select_with_gt_nocs(targets), 
+                        **loss_kwargs,
+                            ) * loss_weight_fxs['cross_entropy']()
+        else:
+            targets_discretized = (targets * (proposals.shape[2] - 1)).round().long()  # (0->1) to indices [0, 1, ...]
+            loss += cross_entropy(select_with_gt_nocs(proposals).transpose(1,2), 
+                                select_with_gt_nocs(targets_discretized), 
+                                reduction=reduction
+                    ) * loss_weight_fxs['cross_entropy']()
         if False:
             # Temperature to limit the proposal probabilities.
             thresh = 1e4
             pmin, pmax = proposals.min(), proposals.max() 
             tau = min([thresh/abs(pmin), thresh/pmax, 1.0])
             proposals = proposals * tau # multiply by temperature
-        loss += cross_entropy(select_with_gt_nocs(proposals).transpose(1,2), 
-                              select_with_gt_nocs(targets_discretized), 
-                              reduction=reduction
-                ) * loss_weight_fxs['cross_entropy']()
 
     if mse_loss is not None:
         assert proposals.shape[2] == 1, 'Expecting only single bin per color.'
-        mse_kwargs = {}
-        if isinstance(mse_loss, SymmetryAwareMSELoss):
-            mse_kwargs['labels'] = select_with_gt_nocs(torch.cat(labels))
+        loss_kwargs = {}
+        if isinstance(mse_loss, SymmetryAwareLoss):
+            loss_kwargs['labels'] = select_with_gt_nocs(torch.cat(labels))
+            loss_kwargs['loss_type']='mse'
         loss += mse_loss(
                 select_with_gt_nocs(proposals).squeeze(2), 
                 select_with_gt_nocs(targets), 
-                **mse_kwargs,
+                **loss_kwargs,
             ) * loss_weight_fxs['mse']()
 
     if discriminator_loss is not None: 
