@@ -186,6 +186,13 @@ def visualize_data(cfg: DictConfig):
             if input('press enter for another "n" for next dataset: ') == 'n': break
 
 
+from utils.load_save import load_discriminator
+@hydra.main(version_base=None, config_path="./config", config_name="gan")
+def test_loading_disc(cfg: DictConfig):
+    disc = hydra.utils.instantiate(cfg.model.nocs_loss)['discriminator']
+    chkpt='checkpoints/gan-nocs/gan-with-l2/2023-10-17_15-50-32/0221_000000.pth'
+    load_discriminator(model=disc, checkpoint=chkpt)
+
 if __name__ == "__main__":
     # testing_termination()
     # compare_datasets()
@@ -193,4 +200,6 @@ if __name__ == "__main__":
     # verify_data()
     # simple_test()
 
-    visualize_data()
+    # visualize_data()
+    
+    test_loading_disc()
