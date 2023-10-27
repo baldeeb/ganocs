@@ -228,7 +228,8 @@ class RoIHeadsWithNocs(RoIHeads):
                                                            nocs_loss_mode=self.nocs_heads.mode,
                                                            depth=depth,
                                                            samples_with_valid_targets=nocs_gt_available,
-                                                           **self._kwargs)
+                                                           **self._kwargs, 
+                                                           images=[t['image'] for t in targets if 'image' in targets])
                         
                         if self.cache_results:
                             split_loss = separate_image_results(loss_mask['loss_nocs'], labels)
