@@ -13,6 +13,7 @@ from utils.load_save import save_model, save_config
 from utils.evaluation.wrapper import eval
 from utils.multiview.wrapper import MultiviewLossFunctor
 from utils.model import get_model_parameters
+from models.masking import Masking
 
 # TODO: discard and pass device to collate_fn
 def targets2device(targets, device):
@@ -72,6 +73,23 @@ def run(cfg: DictConfig) -> None:
                                               cfg.device)
     else: multiview_loss = lambda: {}
 
+
+    if cfg.model.MIC_ON:
+        if cfg.model.MASKING_AUGMENTATION:
+            mask_color_jitter_p, mask_color_jitter_s, mask_blur = 0.2, 0.2, True
+        else:
+            mask_color_jitter_p, mask_color_jitter_s, mask_blur = 0, 0, False
+        masking = Masking(
+            block_size=cfg.model.MASKING_BLOCK_SIZE,
+            ratio=cfg.model.MASKING_RATIO,
+            color_jitter_s=mask_color_jitter_s,
+            color_jitter_p=mask_color_jitter_p,
+            blur=mask_blur,
+            mean=cfg.INPUT.PIXEL_MEAN, 
+            std=cfg.INPUT.PIXEL_STD)
+        
+
+
     # Optimizer
     optim_cfg = cfg.optimization
     parameters = get_model_parameters(model, keys=optim_cfg.parameters)
@@ -86,8 +104,11 @@ def run(cfg: DictConfig) -> None:
                                                leave=False, desc='Training Batch Loop'):
             images = [im.to(cfg.device) for im in images]
             targets = targets2device(targets, cfg.device)  # TODO: Discard and pass device to collate_fn
-            
-            losses = model(images, targets)                # Forward pass
+
+            if cfg.model.MIC_ON:
+                masked_target_images = [masking(image.unsqueeze(0).clone().detach()).detach().squeeze() for image in images]
+
+            losses = model(images+masked_target_images, targets+targets)                # Forward pass
             losses.update(multiview_loss())                # (Optional) Add multiview loss
             loss = sum(losses.values())                    # Sum losses
             

@@ -1,5 +1,5 @@
 defaults:
-  - model: base
+  - model: gan
   - data: original_nocs
   - optimization: frozen_backbone
   - _self_
@@ -8,7 +8,7 @@ log: true                 # Whether to push logs to wandb
 logger:
   project: gan-nocs
   entity:  rpm-collab
-  name:    train_new_main
+  name:    train_gan_no_nocs_label_MIC_l2
 
 device: cuda:0
 checkpoint_dir: ./checkpoints/${logger.project}/${logger.name}/${now:%Y-%m-%d_%H-%M-%S}
@@ -23,6 +23,20 @@ model:
   num_classes: 7
   box_score_thresh: 0.7
   
+  DOMAIN_ADAPTATION_ON: True
+  MIC_ON: True
+  MASKING_AUGMENTATION: False
+  PSEUDO_LABEL_THRESHOLD: 0.8
+  PSEUDO_LABEL_LAMBDA: 1.0
+  PSEUDO_LABEL_WEIGHT: 'prob'
+  MASKING_BLOCK_SIZE: 32
+  MASKING_RATIO: 0.5
+  TEACHER_ALPHA: 0.9
+
+INPUT:
+  PIXEL_MEAN: [102.9801, 115.9465, 122.7717]
+  # Values to be used for image normalization
+  PIXEL_STD: [1., 1., 1.]
 hydra:
     run:
         dir: ${checkpoint_dir}

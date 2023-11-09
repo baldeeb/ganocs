@@ -21,12 +21,13 @@ from torchvision.models.detection.roi_heads import (
     maskrcnn_inference,
     keypointrcnn_loss, keypointrcnn_inference,
     )
-# from torchvision.models.detection.transform import paste_masks_in_image
+from torchvision.models.detection.transform import paste_masks_in_image
 from models.losses.nocs_loss import nocs_loss
 from models.losses.multiview_consistency import multiview_consistency_loss
 from models.nocs_util import select_nocs_proposals, separate_image_results
 from models.nocs_heads import NocsHeads
-
+from torch import (Tensor, cat)
+import torch.nn.functional as F
 import torchvision.transforms as T
 
 class RoIHeadsWithNocs(RoIHeads):
@@ -56,7 +57,6 @@ class RoIHeadsWithNocs(RoIHeads):
         # TODO: These should be owned by the NOCS head.
         nocs_loss_mode:str  = 'classification',  # regression, classification
         nocs_loss=torch.nn.functional.cross_entropy,  # can be cross entropy or discriminator
-        is_realsense=[],
 
         # Others
         **kwargs,
@@ -179,6 +179,9 @@ class RoIHeadsWithNocs(RoIHeads):
             image_shapes (List[Tuple[H, W]]): the sizes of each image in the batch.
             targets (List[Dict]): 
         """
+
+
+
         self.is_realsense = [target['labels'] is not None for target in (targets or [])]
 
         proposals_with_gt = [proposal for proposal, is_real in zip(proposals, self.is_realsense) if is_real]
@@ -290,6 +293,7 @@ class RoIHeadsWithNocs(RoIHeads):
 
 
 
+
             if any(nocs_gt_available) or use_unlabeled_nocs:
 
                 reduction = 'none' if self.cache_results else 'mean'
@@ -307,6 +311,34 @@ class RoIHeadsWithNocs(RoIHeads):
                                                     samples_with_valid_targets=nocs_gt_available,
                                                     **self._kwargs)
                 
+            if not all(nocs_gt_available) and self._kwargs["MIC_ON"]: 
+                nocs_maps = select_nocs_proposals(nocs_proposals, gt_labels, 
+                                                    self.nocs_heads.num_classes)
+                nocs_out=[]
+                bin_index=1
+                for i, (pred, o_im_s) in enumerate(zip(nocs_maps, image_shapes)):
+
+                    num_bins =  pred["x"].shape[bin_index]
+                    def process_nocs_dim(v):
+                        if num_bins > 1:  # Assume that it is classification and not regression.
+                            v = v.argmax(bin_index) / num_bins 
+                        v = paste_masks_in_image(v.unsqueeze(bin_index), 
+                                                targets[i]["boxes"], o_im_s)
+                        return v
+                    nocs = cat([process_nocs_dim(pred["x"]),
+                                process_nocs_dim(pred["y"]),
+                                process_nocs_dim(pred["z"])],
+                                dim=1)
+                    nocs_maps[i]=nocs
+                        
+
+                reduction = 'none' if self.cache_results else 'mean'
+                loss_mask["loss_MIC"] = F.mse_loss(nocs_maps[0], nocs_maps[1])
+                #mic_loss(nocs_maps[0],nocs_maps[1])
+                
+                
+
+
                 if self.cache_results:
                     split_loss = separate_image_results(loss_mask['loss_nocs'], labels)
                     split_nocs = separate_image_results(nocs_proposals, labels)
@@ -367,6 +399,7 @@ class RoIHeadsWithNocs(RoIHeads):
             self._run_keypoint_head(result, targets, losses, proposals, matched_idxs, labels, features, image_shapes)
 
         if self.cache_results and self.training: self._cache = result
+
         return result, losses
     
 
