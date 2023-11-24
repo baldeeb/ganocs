@@ -1,3 +1,6 @@
+# README: This experiment tested the utility of pose consistency in video data for the purpose of
+#   domain adaptation. The results were not consistently positive so no further testing was conducted.
+
 defaults:
   - base
   - override optimization: frozen_backbone
@@ -19,8 +22,7 @@ model:
     # loss_weight: 0.1 # default is 10
     loss_mode: 
       - alignment 
-      # - pixelwise
-      # - pose DOESN't WORK
+      # - pixelwis
 
 optimization:
   parameters: [roi_heads]  # roi_heads or nocs_heads
