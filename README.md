@@ -6,25 +6,25 @@ We proposed using Generative Adversarial Learning [Normalized Object Coordinate 
 
 <img 
   src="./docs/GANOCS-Diagram-with-background.png"
-  alt="The left is a depiction of a supervised method and to the right a depiction of our proposed pipeline. Notably our pipeline does not require labels for all input data provided."
+  alt="The left is a depiction of a supervised method and to the right is a depiction of our proposed pipeline. Noteably our pipeline does not require labels for all input data provided."
   style="width:100%; margin-left: auto; margin-right: auto; display: block;"
 />
 
-We show that our method is capable of producing normalize object coordiate maps smoother over unseen data. Further grounding of the discriminator using sparse depth is a primising next step for this work.
+We show that our method is capable of producing normalize object coordinate maps more smooth over unseen data. Further grounding of the discriminator using sparse depth is a promising next step for this work.
 
 <img 
   src="./docs/GANOCS-results.png"
-  alt="Results comparing the qualitative results of the supervised work vs our proposed pipeline when trained using only simlated labels data and tested on real data."
+  alt="Results comparing the qualitative results of the supervised work vs our proposed pipeline when trained using only simulated labels data and tested on real data."
   style="width:75%; margin-left: auto; margin-right: auto; display: block;"
 />
 
 ## Dataset
 
-We use the dataset forom [the original NOCS work](https://github.com/hughw19/NOCS_CVPR2019). We do run some eperiments using [dataset generated through habitat](https://github.com/baldeeb/habitat_datagen_util) and use [rosbag wrappers](https://github.com/baldeeb/rosbag_data_utils) to run some tests on lab collected data.
+We use the dataset from [the original NOCS work](https://github.com/hughw19/NOCS_CVPR2019). We do run some experiments using [dataset generated through habitat](https://github.com/baldeeb/habitat_datagen_util) and use [rosbag wrappers](https://github.com/baldeeb/rosbag_data_utils) to run some tests on lab collected data.
 
 ## Installation
 
-The folllowing packages are required:
+The following packages are required:
 
 ``` #!/bin/bash
 conda install -c conda-forge pycocotools
@@ -39,7 +39,7 @@ pip install wandb
 pip install opencv-python
 ```
 
-## Runnint code
+## Running Training
 
 Simply run: `python train.py -cn <config-name>`
 
